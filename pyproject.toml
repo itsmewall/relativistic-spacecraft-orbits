@@ -1,0 +1,28 @@
+[build-system]
+requires = [
+  "scikit-build-core>=0.10",
+  "pybind11>=2.11",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "relorbit"
+version = "0.0.1"
+description = "Hybrid C++/Python engine for Newton vs Schwarzschild orbits with validation and mission envelopes."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "pyyaml>=6.0",
+  "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.scikit-build]
+# Onde está o pacote Python (src layout)
+wheel.packages = ["src/relorbit_py"]
+
+# Você pode ligar logs se der ruim:
+# cmake.verbose = true
