@@ -66,7 +66,7 @@ suites:
         model: schwarzschild
         params:
           M: 1.0
-          E: 0.9429541672723838
+          E: 0.9431662428100122
           L: 3.466162967069742
           capture_r: 2.5
           capture_eps: 1.0e-12
