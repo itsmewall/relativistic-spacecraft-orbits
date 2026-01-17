@@ -1,170 +1,257 @@
-# relorbit — Schwarzschild (Plano Equatorial) + Validação
+# Relativistic Spacecraft Orbits — Simulação Numérica de Missão Próxima a Buraco Negro
 
-Este repositório implementa e valida um motor numérico (C++ com bindings em Python via `pybind11`) para simulação de órbitas no problema de dois corpos (Newtoniano plano) e, nesta etapa, geodésicas no espaço-tempo de Schwarzschild restritas ao plano equatorial.
-
-A filosofia do projeto é **validar primeiro** (invariantes e constraints), antes de avançar para modelos mais complexos.
+Este repositório implementa um **motor de simulação numérica** (C++ + Python) para estudar, com rigor físico e critérios de validação, a dinâmica de uma **sonda espacial em missão próxima a um buraco negro**, cobrindo desde o regime clássico (Newton/2-corpos) até o regime relativístico (geodésicas em Schwarzschild no plano equatorial).  
+O objetivo final do TCC é evoluir este núcleo para uma **missão completa**: fases orbitais, janelas de manobra, critérios de captura/escape, análise de robustez numérica e extração de observáveis (por exemplo: precessão relativística, regimes de estabilidade, transições bound/unbound/capture).
 
 ---
 
-## 1. O que foi implementado nesta etapa (Schwarzschild)
+## 1. Visão do Projeto
 
-### 1.1 Modelo físico
-Trabalhamos com geodésicas de uma partícula teste no espaço-tempo de Schwarzschild, no **plano equatorial** (θ = π/2) e em **unidades geométricas** (G = c = 1).
+### 1.1 Arquitetura
+- **C++ (engine)**: integra EDOs com foco em desempenho e reprodutibilidade numérica.
+- **pybind11 (bindings)**: expõe o motor C++ como `relorbit_py._engine`.
+- **Python (orquestração)**:
+  - leitura de casos (`cases.yaml`)
+  - execução (`simulate.py`)
+  - validação e relatórios (`validate.py`)
+  - geração de plots e `report.json`
 
-No formalismo padrão, existem duas constantes de movimento:
+### 1.2 Por que C++ + Python?
+- C++ entrega **velocidade** e controle fino de performance (passo fixo, loops longos).
+- Python entrega **produtividade**, inspeção, gráficos, relatórios e automação de experimentos.
 
-- Energia específica: **E**
-- Momento angular específico: **L**
+---
 
-O movimento radial pode ser escrito por uma equação de “potencial efetivo” na forma:
+## 2. Modelos Físicos e Equações Regentes
+
+> Importante: este projeto separa explicitamente **regimes físicos** e **sistemas de unidades**.
+- Newtoniano: unidades adimensionais (ou SI, se você definir `μ` em SI e estados coerentes).
+- Schwarzschild: **unidades geométricas** típicas em GR (frequentemente `G=c=1`), onde `M` tem dimensão de comprimento/tempo.
+
+### 2.1 Modelo Newtoniano (2-corpos planar)
+A dinâmica do movimento relativo no problema de dois corpos (massa reduzida) no plano é dada por:
 
 \[
-\left(\frac{dr}{d\tau}\right)^2 = E^2 - \left(1-\frac{2M}{r}\right)\left(1+\frac{L^2}{r^2}\right)
+\ddot{\mathbf r}(t) = -\mu \frac{\mathbf r(t)}{\|\mathbf r(t)\|^3},
+\quad \mathbf r=(x,y),
+\quad \mu = G(M_1+M_2)
 \]
 
-onde:
-- M é a massa (parâmetro) do buraco negro,
-- r é a coordenada radial,
-- τ é o **tempo próprio**.
+Estado no plano:
+\[
+\mathbf y = [x,\,y,\,v_x,\,v_y]
+\]
 
-Define-se então a constraint (diagnóstico numérico):
+Invariantes clássicos (específicos, por unidade de massa):
+- **Energia específica**
+\[
+E = \frac{v^2}{2} - \frac{\mu}{r}, 
+\quad v^2=v_x^2+v_y^2,\quad r=\sqrt{x^2+y^2}
+\]
+- **Momento angular específico (z)**
+\[
+h = x v_y - y v_x
+\]
+
+Classificação física (Newton):
+- \(E < 0\) → órbita ligada (elipse/círculo)
+- \(E = 0\) → parabólica
+- \(E > 0\) → hiperbólica (não ligada)
+
+O `validate` mede a deriva relativa máxima de \(E\) e \(h\) ao longo da integração.
+
+---
+
+### 2.2 Relatividade Geral: Schwarzschild Equatorial (geodésicas)
+No entorno de uma massa esfericamente simétrica não rotante, usa-se a métrica de Schwarzschild:
 
 \[
-\epsilon(\tau) = \left(\frac{dr}{d\tau}\right)^2 - \Big(E^2 - (1-\frac{2M}{r})(1+\frac{L^2}{r^2})\Big)
+ds^2 = -\left(1-\frac{2M}{r}\right) dt^2 +
+\left(1-\frac{2M}{r}\right)^{-1} dr^2 +
+r^2(d\theta^2+\sin^2\theta\,d\phi^2)
 \]
 
-Idealmente, **ε(τ) = 0** para uma solução exata. Na prática, usamos **max |ε|** como métrica de erro/deriva.
+Restrição ao plano equatorial:
+\[
+\theta=\frac{\pi}{2},\quad d\theta=0
+\]
 
-### 1.2 Integração numérica
-O motor C++ integra as equações no tempo próprio usando um integrador de passo fixo RK4, retornando séries temporais:
-- τ, r(τ), φ(τ)
-- ε(τ) como diagnóstico
-- `OrbitStatus` (ex.: `BOUND`, `CAPTURE`, `UNBOUND`, `ERROR`)
+A trajetória de uma partícula livre (sonda sem propulsão) é uma **geodésica temporal**, parametrizada pelo **tempo próprio** \(\tau\). O 4-velocidade é \(u^\mu = dx^\mu/d\tau\) e satisfaz a normalização:
 
-### 1.3 Critérios de validação (banca-friendly)
-Para cada caso de teste, avaliamos:
+\[
+g_{\mu\nu}u^\mu u^\nu = -1
+\]
 
-1) **Consistência da constraint**
-- `constraint_abs_max = max(|ε(τ)|)`
-- deve ser menor que um limite (ex.: 1e-10 ou 1e-8)
+Devido às simetrias (vetores de Killing), existem constantes de movimento:
+- **Energia específica relativística** \(\mathcal E\)
+- **Momento angular específico** \(\mathcal L\)
 
-2) **Comportamento esperado**
-- órbita circular: `r_max_dev = max(|r(τ) - r0|)` deve ser pequeno
-- plunge/capture: o status deve indicar `CAPTURE` (evento de captura definido por critério radial)
+Uma forma padrão de escrever o movimento radial usa o **potencial efetivo**:
 
----
+\[
+\left(\frac{dr}{d\tau}\right)^2 + V_\text{eff}(r) = \mathcal E^2
+\]
+\[
+V_\text{eff}(r) = \left(1-\frac{2M}{r}\right)\left(1+\frac{\mathcal L^2}{r^2}\right)
+\]
 
-## 2. Casos de teste Schwarzschild incluídos
+Interpretação:
+- Se \(\mathcal E^2\) estiver abaixo/ acima de barreiras de \(V_\text{eff}\), surgem turning points (órbita ligada) ou queda (captura).
+- Em Schwarzschild, a estrutura de órbitas circulares e estabilidade muda drasticamente no regime forte (ex.: região próxima ao ISCO).
 
-### 2.1 `schwarzschild_circular_M1_r10`
-- Objetivo: verificar órbita circular estável em r = 10M.
-- Esperado:
-  - `OrbitStatus.BOUND`
-  - `r_max_dev` pequeno (ex.: <= 1e-3)
-  - `max|ε|` ~ 0 (dentro da tolerância)
-
-### 2.2 `schwarzschild_plunge_M1_r5p8`
-- Objetivo: verificar evento de captura (plunge) em regime relativístico forte.
-- Esperado:
-  - `OrbitStatus.CAPTURE`
-  - `max|ε|` baixo (dentro da tolerância)
-  - `r(τ)` decrescendo até o raio de captura
-
-Observação importante: para um “plunge” robusto, o modelo deve permitir selecionar o ramo radial/inicialização apropriada (ex.: via condição inicial radial, ou escolha explícita do sinal de dr/dτ). O teste foi estruturado para exercer o caminho de captura via critério de evento.
+O projeto usa dois diagnósticos essenciais:
+1) **Constraint/epsilon** (vínculo): mede quão bem a integração respeita a normalização ou a consistência interna das constantes (\(\mathcal E,\mathcal L\)) com o estado.
+2) **Classificação do status** (BOUND/UNBOUND/CAPTURE): baseada em critérios físicos/eventos (ex.: cruzar um limiar \(r\) de captura).
 
 ---
 
-## 3. Como rodar
+## 3. Método Numérico (Integrador) e Critérios de Qualidade
 
-### 3.1 Instalar em modo editável (compila o C++ via CMake)
-No Windows, rode dentro do **Developer Command Prompt x64**:
+### 3.1 Integração RK4 (passo fixo)
+O motor implementa RK4 clássico para um sistema:
+\[
+\dot{\mathbf y} = f(t,\mathbf y)
+\]
 
-```powershell
-cd C:\Users\walla\Workspace\TCC\relativistic-spacecraft-orbits
+Com passo \(h\), RK4 faz:
+\[
+k_1 = f(t_n, y_n)
+\]
+\[
+k_2 = f(t_n+\frac{h}{2}, y_n+\frac{h}{2}k_1)
+\]
+\[
+k_3 = f(t_n+\frac{h}{2}, y_n+\frac{h}{2}k_2)
+\]
+\[
+k_4 = f(t_n+h, y_n+h k_3)
+\]
+\[
+y_{n+1}=y_n+\frac{h}{6}(k_1+2k_2+2k_3+k_4)
+\]
+
+Propriedade relevante:
+- erro global típico ~ \(O(h^4)\) (para soluções suaves).  
+Por isso, reduzir \(h\) pela metade tende a reduzir erro ~16×, e isso é um teste forte de sanidade numérica.
+
+### 3.2 O que “passar” significa?
+- Newton: deriva relativa de energia e momento angular abaixo dos limites do caso.
+- Schwarzschild: máximo de \(|\epsilon(\tau)|\) abaixo do limite, e status compatível com o esperado (BOUND ou CAPTURE), além de critérios adicionais quando aplicável (ex.: desvio de raio em circular).
+
+---
+
+## 4. Como Rodar
+
+### 4.1 Instalação em modo desenvolvimento
+No diretório do projeto:
+```bash
 python -m pip install -e .
-````
-
-Verificar engine:
-
-```powershell
-python -c "import relorbit_py as r; print(r.engine_hello())"
 ```
 
-### 3.2 Executar validação (gera relatório)
+### 4.2 Rodar validação (sem plots)
 
-```powershell
+```bash
 python -m relorbit_py.validate
 ```
 
-### 3.3 Executar validação com plots
+### 4.3 Rodar validação (com plots)
 
-```powershell
+```bash
 python -m relorbit_py.validate --plots
 ```
 
-Saídas:
+Saídas típicas:
 
-* `out/report.json` com resultados por suíte/caso
-* `out/plots/` com gráficos
-
----
-
-## 4. O que você deve observar nos plots
-
-Para Schwarzschild:
-
-* `*_orbit.png`:
-  projeção planar (x=r cosφ, y=r sinφ) apenas para visualização.
-
-* `*_r_tau.png`:
-  r vs τ.
-
-  * circular: linha praticamente constante
-  * plunge: r decai até captura
-
-* `*_constraint.png` e `*_constraint_log.png`:
-  ε(τ) e |ε(τ)| em escala log.
-  O objetivo é verificar que o erro numérico permanece controlado ao longo da integração.
+* Console: PASS/FAIL por caso
+* `out/report.json`: relatório estruturado
+* `out/plots/*.png`: órbitas e diagnósticos
 
 ---
 
-## 5. Estrutura relevante (Schwarzschild)
+## 5. Casos de Teste (cases.yaml)
 
-* `src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp`
+O arquivo `cases.yaml` define suites e casos.
 
-  * definição do modelo equatorial de Schwarzschild e utilitários
+Exemplos de casos:
 
-* `src_cpp/lib/api.cpp` e `src_cpp/include/relorbit/api.hpp`
+* Newton circular / elíptico / hiperbólico: testa conservação de (E) e (h)
+* Schwarzschild circular: testa constância de (r(\tau)) e constraint
+* Schwarzschild plunge/capture: testa evento de captura + constraint
 
-  * API C++ exposta ao Python (funções e structs)
+Cada caso contém:
 
-* `src_cpp/bindings/pybind_module.cpp`
-
-  * bindings pybind11 (expondo `simulate_schwarzschild_equatorial_rk4`, structs e enums)
-
-* `src/relorbit_py/simulate.py`
-
-  * carregamento de YAML e chamada do engine com assinatura correta
-
-* `src/relorbit_py/validate.py`
-
-  * execução das suítes, critérios, geração de `report.json` e plots
-
-* `src/relorbit_py/cases.yaml`
-
-  * definição declarativa dos casos e critérios
+* `model`, `params` (μ ou M, E, L), `state0`, `span`, `solver` (dt, n_steps) e `criteria`
 
 ---
 
-## 6. Limitações atuais (deixar claro na escrita do TCC)
+## 6. O que Você Deve “Ver” e Concluir (interpretação dos plots)
 
-* O modelo atual é voltado a validação inicial e comportamento qualitativo (circular/capture).
-* Para análise científica mais rica (periélio, frequência radial, comparação com soluções analíticas/parametrizações), o próximo passo é evoluir o modelo para um estado dinâmico completo (ex.: incluir variável radial conjugada, melhor controle do ramo radial e diagnósticos independentes da constraint “por construção”).
+Newton:
+
+* **Orbit plot (x,y)**: forma geométrica (círculo/elipse/hipérbole).
+* **Invariants vs time**: (E(t)) e (h(t)) aproximadamente constantes.
+* **Drift (log)**: (|E-E_0|) e (|h-h_0|) em escala log para visualizar erro acumulado.
+
+Schwarzschild:
+
+* **Orbit equatorial (x,y)**: projeção plana de (r(\tau),\phi(\tau)).
+* **r(tau)**: revela estabilidade/captura (queda monotônica ou turning points).
+* **Constraint signed / log**: qualidade numérica do vínculo (quanto mais próximo de 0, melhor).
 
 ---
 
-## 7. Referências (para citar no TCC)
+## 7. Roadmap: de “Órbita” para “Missão Completa”
 
-* Misner, Thorne & Wheeler — *Gravitation* (geodésicas, Schwarzschild, integrais de movimento).
-* Schutz — *A First Course in General Relativity* (introdução prática e geodésicas).
-* Chandrasekhar — *The Mathematical Theory of Black Holes* (tratamento clássico e profundo).
+O TCC não termina em “geodésica bonita”. O objetivo é **missão completa**: decisões, fases e engenharia.
+
+Evoluções planejadas:
+
+1. **Observáveis relativísticos**: precessão periélio, regimes bound/unbound/capture, comparação com predições analíticas.
+2. **Modelos mais ricos**:
+
+   * Kerr (buraco negro rotante), frame-dragging
+   * parametrizações alternativas e robustas do estado
+3. **Missão**:
+
+   * planejamento por fases (aproximação → inserção → science orbit → saída)
+   * manobras impulsivas (Δv) e/ou baixa propulsão (thrust contínuo)
+   * restrições (segurança térmica, limite de maré, limite de radiação — se modelado)
+4. **Numérica**:
+
+   * controle de erro (adaptativo) e detecção de eventos (capture/escape/periapsis)
+   * testes de convergência e verificação cruzada (Python vs C++)
+
+---
+
+## 8. Estrutura do Repositório (alto nível)
+
+* `src_cpp/`
+
+  * `include/relorbit/...` (headers do motor)
+  * `lib/` (implementações)
+  * `bindings/pybind_module.cpp` (pybind)
+* `src/relorbit_py/`
+
+  * `simulate.py` (execução de casos)
+  * `validate.py` (banco de provas + plots + report)
+  * `cases.yaml` (suites/casos)
+  * `__init__.py` (carregamento do engine)
+
+---
+
+## 9. Nota de Rigor
+
+Este repositório é construído para ser defendível: toda etapa deve ter
+
+* equações claras,
+* critérios de verificação,
+* logs e evidências (plots + relatórios),
+* e testes que não “se autoenganam” (ex.: convergência com dt).
+
+---
+
+## 10. Licença e Citação
+
+Uso acadêmico e experimental. Se este repositório for usado como base para trabalho acadêmico, cite o autor e descreva claramente as modificações.
+
+```
