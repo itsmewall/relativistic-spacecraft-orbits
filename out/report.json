@@ -64,10 +64,12 @@
     {
       "suite": "schwarzschild",
       "ok": true,
-      "n_cases": 2,
+      "ok_cases": true,
+      "ok_convergence": true,
+      "n_cases": 6,
       "results": [
         {
-          "name": "schwarzschild_circular_M1_r10",
+          "name": "schwarzschild_circular_M1_r10_dt1e3",
           "passed": true,
           "status": "OrbitStatus.BOUND",
           "message": "",
@@ -75,6 +77,7 @@
           "M": 1.0,
           "E": 0.9561828874675149,
           "L": 3.779644730092272,
+          "pr0": 0.0,
           "tau0": 0.0,
           "tauf": 200.0,
           "dt": 0.001,
@@ -86,10 +89,59 @@
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND"
-          }
+          },
+          "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
         },
         {
-          "name": "schwarzschild_plunge_M1_r5p8",
+          "name": "schwarzschild_circular_M1_r10_dt5e4",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.9561828874675149,
+          "L": 3.779644730092272,
+          "pr0": 0.0,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.0005,
+          "n_steps": 0,
+          "r_min": 10.0,
+          "r_end": 10.0,
+          "constraint_abs_max": 0.0,
+          "norm_u_abs_max": 3.909716994598966e-11,
+          "criteria": {
+            "constraint_abs_max": 1e-10,
+            "status": "BOUND"
+          },
+          "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
+        },
+        {
+          "name": "schwarzschild_circular_M1_r10_dt2p5e4",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.9561828874675149,
+          "L": 3.779644730092272,
+          "pr0": 0.0,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.00025,
+          "n_steps": 0,
+          "r_min": 10.0,
+          "r_end": 10.0,
+          "constraint_abs_max": 0.0,
+          "norm_u_abs_max": 1.4780243695611262e-10,
+          "criteria": {
+            "constraint_abs_max": 1e-10,
+            "status": "BOUND"
+          },
+          "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
+        },
+        {
+          "name": "schwarzschild_plunge_M1_r5p8_dt5e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
           "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.49979, r_cap=2.5, capture_r=2.5, M=1)",
@@ -97,6 +149,7 @@
           "M": 1.0,
           "E": 0.9431662428100122,
           "L": 3.466162967069742,
+          "pr0": -0.02,
           "tau0": 0.0,
           "tauf": 200.0,
           "dt": 0.0005,
@@ -108,7 +161,102 @@
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "CAPTURE"
-          }
+          },
+          "_sig": "{\"E\":0.9431662428100122,\"L\":3.466162967069742,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.02,\"span\":[0.0,200.0],\"state0\":[5.8,0.0]}"
+        },
+        {
+          "name": "schwarzschild_plunge_M1_r5p8_dt2p5e4",
+          "passed": true,
+          "status": "OrbitStatus.CAPTURE",
+          "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.49993, r_cap=2.5, capture_r=2.5, M=1)",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.9431662428100122,
+          "L": 3.466162967069742,
+          "pr0": -0.02,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.00025,
+          "n_steps": 0,
+          "r_min": 2.4999264383438735,
+          "r_end": 2.4999264383438735,
+          "constraint_abs_max": 1.1213252548714081e-14,
+          "norm_u_abs_max": 0.0005537384061351514,
+          "criteria": {
+            "constraint_abs_max": 1e-08,
+            "status": "CAPTURE"
+          },
+          "_sig": "{\"E\":0.9431662428100122,\"L\":3.466162967069742,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.02,\"span\":[0.0,200.0],\"state0\":[5.8,0.0]}"
+        },
+        {
+          "name": "schwarzschild_plunge_M1_r5p8_dt1p25e4",
+          "passed": true,
+          "status": "OrbitStatus.CAPTURE",
+          "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.5, r_cap=2.5, capture_r=2.5, M=1)",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.9431662428100122,
+          "L": 3.466162967069742,
+          "pr0": -0.02,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.000125,
+          "n_steps": 0,
+          "r_min": 2.4999954865513776,
+          "r_end": 2.4999954865513776,
+          "constraint_abs_max": 6.772360450213455e-15,
+          "norm_u_abs_max": 0.00027680691350573383,
+          "criteria": {
+            "constraint_abs_max": 1e-08,
+            "status": "CAPTURE"
+          },
+          "_sig": "{\"E\":0.9431662428100122,\"L\":3.466162967069742,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.02,\"span\":[0.0,200.0],\"state0\":[5.8,0.0]}"
+        }
+      ],
+      "convergence": [
+        {
+          "passed": true,
+          "inconclusive": false,
+          "cases": [
+            "schwarzschild_circular_M1_r10_dt1e3",
+            "schwarzschild_circular_M1_r10_dt5e4",
+            "schwarzschild_circular_M1_r10_dt2p5e4"
+          ],
+          "dts": [
+            0.001,
+            0.0005,
+            0.00025
+          ],
+          "norm_u_abs_max": [
+            1.2710943408933417e-11,
+            3.909716994598966e-11,
+            1.4780243695611262e-10
+          ],
+          "violations": [],
+          "abs_tol": 1e-09,
+          "rel_tol": 0.25
+        },
+        {
+          "passed": true,
+          "inconclusive": false,
+          "cases": [
+            "schwarzschild_plunge_M1_r5p8_dt5e4",
+            "schwarzschild_plunge_M1_r5p8_dt2p5e4",
+            "schwarzschild_plunge_M1_r5p8_dt1p25e4"
+          ],
+          "dts": [
+            0.0005,
+            0.00025,
+            0.000125
+          ],
+          "norm_u_abs_max": [
+            0.0011079743648583218,
+            0.0005537384061351514,
+            0.00027680691350573383
+          ],
+          "violations": [],
+          "abs_tol": 1e-09,
+          "rel_tol": 0.25
         }
       ]
     }

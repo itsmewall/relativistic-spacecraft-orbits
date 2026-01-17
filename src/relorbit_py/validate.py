@@ -1,3 +1,4 @@
+# src/relorbit_py/validate.py
 from __future__ import annotations
 
 import argparse
@@ -11,6 +12,10 @@ import matplotlib.pyplot as plt
 from . import engine_hello
 from .simulate import load_cases_yaml, simulate_case
 
+
+# ============================================================
+# Helpers gerais
+# ============================================================
 
 def _rel_drift(series: List[float]) -> float:
     a0 = float(series[0])
@@ -37,13 +42,14 @@ def _unwrap_traj(res: Any) -> Any:
     if hasattr(res, "t") and hasattr(res, "y"):
         return res
 
-    # Schwarzschild eq
+    # Schwarzschild
     if hasattr(res, "tau") and hasattr(res, "r") and hasattr(res, "phi"):
         return res
 
-    # wrappers comuns
+    # Fallbacks
     if isinstance(res, dict) and "traj" in res:
         return res["traj"]
+
     if hasattr(res, "data") and isinstance(getattr(res, "data"), dict) and "traj" in res.data:
         return res.data["traj"]
 
@@ -80,6 +86,52 @@ def _get_span(case: Dict[str, Any]) -> Tuple[float, float]:
     raise KeyError(f"span ausente no caso '{case.get('name','<sem-nome>')}'. Esperado case.span=[a,b].")
 
 
+def _case_pr0(case: Dict[str, Any]) -> float:
+    if "pr0" in case:
+        return float(case["pr0"])
+    params = case.get("params", {}) or {}
+    if "pr0" in params:
+        return float(params["pr0"])
+    return 0.0
+
+
+def _fmt_e(x: Any, width: int = 12, prec: int = 3) -> str:
+    if x is None:
+        return " " * (width - 4) + "None"
+    try:
+        return f"{float(x):>{width}.{prec}e}"
+    except Exception:
+        s = str(x)
+        if len(s) > width:
+            return (s[: width - 3] + "...").rjust(width)
+        return s.rjust(width)
+
+
+def _fmt_f(x: Any, width: int = 10, prec: int = 6) -> str:
+    if x is None:
+        return " " * (width - 4) + "None"
+    try:
+        return f"{float(x):>{width}.{prec}f}"
+    except Exception:
+        s = str(x)
+        if len(s) > width:
+            return (s[: width - 3] + "...").rjust(width)
+        return s.rjust(width)
+
+
+def _short_msg(msg: str, maxlen: int = 76) -> str:
+    if not msg:
+        return ""
+    msg = msg.replace("\n", " ").strip()
+    if len(msg) <= maxlen:
+        return msg
+    return msg[: maxlen - 3] + "..."
+
+
+# ============================================================
+# Plotting
+# ============================================================
+
 def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
     t = np.array(traj.t, dtype=float)
     y = np.array(traj.y, dtype=float)  # Nx4
@@ -114,45 +166,6 @@ def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
     plt.title(f"Drift: {case_name} | rel_dE={_rel_drift(list(E)):.2e} rel_dh={_rel_drift(list(h)):.2e}")
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_drift.png"))
-
-
-def _compute_norm_u_fallback(traj: Any) -> np.ndarray:
-    """
-    Fallback: norm_u = g(u,u)+1 (deve tender a 0).
-    Usa: M, E, L, r, pr; e calcula ut via E/A.
-    ATENCAO: perto do horizonte (A->0) isso pode explodir numericamente.
-    """
-    tau = np.array(traj.tau, dtype=float)
-    r = np.array(traj.r, dtype=float)
-
-    if not hasattr(traj, "pr"):
-        raise AttributeError("Trajetória Schwarzschild não possui pr; não consigo calcular norm_u fallback.")
-
-    M = float(getattr(traj, "M"))
-    Epar = float(getattr(traj, "E"))
-    Lpar = float(getattr(traj, "L"))
-    pr = np.array(getattr(traj, "pr"), dtype=float)
-
-    if pr.size != tau.size:
-        raise ValueError(
-            f"pr size mismatch: len(pr)={pr.size} len(tau)={tau.size}. "
-            "Não consigo calcular norm_u fallback."
-        )
-
-    A = 1.0 - 2.0 * M / r
-    A = np.where(A <= 0.0, np.nan, A)
-
-    ut = Epar / A
-    ur = pr
-    uphi = Lpar / (r * r)
-
-    gtt = -A
-    grr = 1.0 / A
-    gpp = r * r
-
-    guu = gtt * ut * ut + grr * ur * ur + gpp * uphi * uphi
-    norm_u = guu + 1.0
-    return norm_u
 
 
 def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
@@ -198,35 +211,35 @@ def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_constraint_log.png"))
 
-    # norm_u: plota apenas se tiver shape certo; senao, erro claro.
-    norm_u: Optional[np.ndarray] = None
+    # norm_u: só plota se for compatível com tau
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
-        if nu.size != tau.size:
-            raise ValueError(
-                f"norm_u size mismatch em '{case_name}': len(norm_u)={nu.size} len(tau)={tau.size}. "
-                "Nao vou plotar norm_u. Conserte o engine para preencher norm_u com o mesmo N de tau."
+        if len(nu) != len(tau):
+            raise RuntimeError(
+                f"norm_u shape mismatch no caso '{case_name}': "
+                f"len(norm_u)={len(nu)} vs len(tau)={len(tau)}"
             )
-        norm_u = nu
-    else:
-        norm_u = _compute_norm_u_fallback(traj)
+        if len(nu) > 0:
+            plt.figure()
+            plt.plot(tau, nu, label="norm_u = g(u,u)+1")
+            plt.xlabel("tau")
+            plt.ylabel("norm_u")
+            plt.title(f"4-velocity normalization drift: {case_name}")
+            plt.legend()
+            _savefig(os.path.join(outdir, f"{case_name}_norm_u.png"))
 
-    plt.figure()
-    plt.plot(tau, norm_u, label="norm_u = g(u,u)+1")
-    plt.xlabel("tau")
-    plt.ylabel("norm_u")
-    plt.title(f"4-velocity normalization drift: {case_name}")
-    plt.legend()
-    _savefig(os.path.join(outdir, f"{case_name}_norm_u.png"))
+            plt.figure()
+            plt.semilogy(tau, np.clip(np.abs(nu), 1e-300, None), label="|norm_u|")
+            plt.xlabel("tau")
+            plt.ylabel("|norm_u| (log)")
+            plt.title(f"4-velocity normalization drift (log): {case_name}")
+            plt.legend()
+            _savefig(os.path.join(outdir, f"{case_name}_norm_u_log.png"))
 
-    plt.figure()
-    plt.semilogy(tau, np.clip(np.abs(norm_u), 1e-300, None), label="|norm_u|")
-    plt.xlabel("tau")
-    plt.ylabel("|norm_u| (log)")
-    plt.title(f"4-velocity normalization drift (log): {case_name}")
-    plt.legend()
-    _savefig(os.path.join(outdir, f"{case_name}_norm_u_log.png"))
 
+# ============================================================
+# Validators
+# ============================================================
 
 def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[str, Any]:
     traj = _unwrap_traj(simulate_case(case, "newton"))
@@ -272,45 +285,42 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     traj = _unwrap_traj(simulate_case(case, "schwarzschild"))
 
     tau = np.array(traj.tau, dtype=float)
-    r_arr = np.array(traj.r, dtype=float)
+    r = np.array(traj.r, dtype=float)
 
-    r_min = float(np.min(r_arr)) if r_arr.size > 0 else float("nan")
-    r_end = float(r_arr[-1]) if r_arr.size > 0 else float("nan")
+    r_min = float(np.min(r)) if r.size else None
+    r_end = float(r[-1]) if r.size else None
 
     eps = np.array(traj.epsilon, dtype=float)
-    eps_max = float(np.max(np.abs(eps)))
+    eps_max = float(np.max(np.abs(eps))) if eps.size else None
 
-    # norm_u_abs_max: se engine fornecer norm_u, exige shape correto; senao, fallback.
-    norm_u_abs_max: Optional[float] = None
+    norm_u_max = None
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
         if nu.size != tau.size:
-            raise ValueError(
-                f"norm_u size mismatch em '{case.get('name','<sem-nome>')}': len(norm_u)={nu.size} len(tau)={tau.size}. "
-                "Nao vou computar/plotar norm_u. Conserte o engine."
+            raise RuntimeError(
+                f"norm_u shape mismatch no caso '{case.get('name')}': "
+                f"len(norm_u)={nu.size} vs len(tau)={tau.size}"
             )
         if nu.size > 0:
-            norm_u_abs_max = float(np.nanmax(np.abs(nu)))
-    else:
-        nu_fb = _compute_norm_u_fallback(traj)
-        if nu_fb.size > 0:
-            norm_u_abs_max = float(np.nanmax(np.abs(nu_fb)))
+            norm_u_max = float(np.nanmax(np.abs(nu)))
 
     crit = case.get("criteria", {}) or {}
     eps_max_allowed = float(crit.get("constraint_abs_max", 1e-10))
     expected_status = str(crit.get("status", "BOUND"))
-    status_str = str(getattr(traj, "status", ""))
-    msg_str = str(getattr(traj, "message", ""))
 
+    status_str = str(getattr(traj, "status", ""))
     status_ok = status_str.endswith(expected_status)
-    passed = (eps_max <= eps_max_allowed) and status_ok
+
+    passed = (eps_max is not None and eps_max <= eps_max_allowed) and status_ok
 
     dt, n_steps = _get_solver_dt_nsteps(case)
     tau0, tauf = _get_span(case)
+
     params = case.get("params", {}) or {}
     M = float(params.get("M", case.get("M", 1.0)))
     Epar = float(params.get("E", case.get("E")))
     Lpar = float(params.get("L", case.get("L")))
+    pr0 = _case_pr0(case)
 
     if plotdir is not None:
         _plot_schw(case["name"], traj, plotdir)
@@ -319,25 +329,165 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "name": case["name"],
         "passed": bool(passed),
         "status": status_str,
-        "message": msg_str,
+        "message": getattr(traj, "message", ""),
         "model": "schwarzschild",
         "M": M,
         "E": Epar,
         "L": Lpar,
+        "pr0": pr0,
         "tau0": tau0,
         "tauf": tauf,
         "dt": dt,
         "n_steps": int(n_steps),
         "r_min": r_min,
         "r_end": r_end,
-        "constraint_abs_max": float(eps_max),
-        "norm_u_abs_max": norm_u_abs_max,
+        "constraint_abs_max": float(eps_max) if eps_max is not None else None,
+        "norm_u_abs_max": norm_u_max,
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
         },
     }
 
+
+# ============================================================
+# Convergência automática (Schwarzschild)
+# ============================================================
+
+def _schw_signature(case: Dict[str, Any]) -> str:
+    """
+    Assinatura física (o que deve permanecer igual entre dt diferentes):
+      (M,E,L,r0,phi0,pr0,span,capture_r,capture_eps)
+    Exclui solver e criteria.
+    """
+    params = case.get("params", {}) or {}
+    state0 = case.get("state0", None)
+    span = case.get("span", None)
+
+    sig = {
+        "model": "schwarzschild",
+        "M": float(params.get("M", case.get("M", 1.0))),
+        "E": float(params.get("E", case.get("E"))),
+        "L": float(params.get("L", case.get("L"))),
+        "state0": state0,
+        "pr0": float(_case_pr0(case)),
+        "span": span,
+        "capture_r": float(params.get("capture_r", case.get("capture_r", 2.0))),
+        "capture_eps": float(params.get("capture_eps", case.get("capture_eps", 1e-12))),
+    }
+    return json.dumps(sig, sort_keys=True, separators=(",", ":"))
+
+
+def _conv_allows_increase(nu_big: float, nu_small: float, abs_tol: float, rel_tol: float) -> bool:
+    """
+    Critério robusto:
+      passa se nu_small <= nu_big + abs_tol + rel_tol*nu_big
+    Isso evita reprovar quando nu já está ~1e-11 e oscila por ruído/roundoff.
+    """
+    return nu_small <= (nu_big + abs_tol + rel_tol * max(nu_big, 0.0))
+
+
+def _check_convergence_schw(
+    results: List[Dict[str, Any]],
+    abs_tol: float = 1e-9,
+    rel_tol: float = 0.25,
+) -> List[Dict[str, Any]]:
+    """
+    Convergência monotônica com tolerância:
+      para dt menor, norm_u_abs_max não deve aumentar "de forma significativa".
+    """
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in results:
+        key = r.get("_sig", None)
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(r)
+
+    conv_reports: List[Dict[str, Any]] = []
+
+    for _key, grp in groups.items():
+        if len(grp) < 2:
+            continue
+
+        grp_sorted = sorted(grp, key=lambda x: float(x.get("dt", 0.0)), reverse=True)
+
+        dts = [float(g["dt"]) for g in grp_sorted]
+        nus_raw = [g.get("norm_u_abs_max", None) for g in grp_sorted]
+        names = [g.get("name", "") for g in grp_sorted]
+
+        if any(v is None for v in nus_raw):
+            conv_reports.append({
+                "passed": False,
+                "inconclusive": True,
+                "reason": "missing norm_u_abs_max in at least one run",
+                "cases": names,
+                "dts": dts,
+                "norm_u_abs_max": nus_raw,
+                "violations": [],
+            })
+            continue
+
+        nus = [float(v) for v in nus_raw]  # type: ignore[arg-type]
+
+        ok = True
+        violations: List[Dict[str, Any]] = []
+        for i in range(len(nus) - 1):
+            nu_big = nus[i]
+            nu_small = nus[i + 1]
+            if not _conv_allows_increase(nu_big, nu_small, abs_tol=abs_tol, rel_tol=rel_tol):
+                ok = False
+                violations.append({
+                    "dt_big": dts[i],
+                    "nu_big": nu_big,
+                    "dt_small": dts[i + 1],
+                    "nu_small": nu_small,
+                    "ratio": (nu_small / nu_big) if nu_big != 0 else None,
+                    "abs_tol": abs_tol,
+                    "rel_tol": rel_tol,
+                })
+
+        conv_reports.append({
+            "passed": bool(ok),
+            "inconclusive": False,
+            "cases": names,
+            "dts": dts,
+            "norm_u_abs_max": nus,
+            "violations": violations,
+            "abs_tol": abs_tol,
+            "rel_tol": rel_tol,
+        })
+
+    return conv_reports
+
+
+# ============================================================
+# Output bonito (terminal)
+# ============================================================
+
+def _print_header(title: str) -> None:
+    print("\n" + title)
+    print("-" * len(title))
+
+
+def _print_table(rows: List[List[str]], headers: List[str]) -> None:
+    cols = len(headers)
+    widths = [len(h) for h in headers]
+    for r in rows:
+        for i in range(cols):
+            widths[i] = max(widths[i], len(r[i]))
+
+    def fmt_row(r: List[str]) -> str:
+        return "  ".join(r[i].ljust(widths[i]) for i in range(cols))
+
+    print(fmt_row(headers))
+    print("  ".join("-" * widths[i] for i in range(cols)))
+    for r in rows:
+        print(fmt_row(r))
+
+
+# ============================================================
+# Main
+# ============================================================
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -356,60 +506,115 @@ def main() -> None:
 
     report: Dict[str, Any] = {"suites": []}
 
-    # -------------------------
+    # ----------------------------
     # Newton
-    # -------------------------
+    # ----------------------------
     newton_cases = cfg["suites"]["newton"]["cases"]
     newton_results: List[Dict[str, Any]] = []
     ok_newton = True
+
     for c in newton_cases:
         r = _validate_newton(c, plotdir if args.plots else None)
         newton_results.append(r)
         ok_newton = ok_newton and r["passed"]
 
-    print(f"Newton suite: ok={ok_newton} cases={len(newton_cases)}")
+    _print_header(f"Newton suite: ok={ok_newton} cases={len(newton_cases)}")
+    n_rows: List[List[str]] = []
     for r in newton_results:
-        tag = "PASS" if r["passed"] else "FAIL"
-        print(f"[{tag}] {r['name']} | dt={r['dt']:.1e} | dE={r['energy_rel_drift']:.3e} | dh={r['h_rel_drift']:.3e}")
+        n_rows.append([
+            "PASS" if r["passed"] else "FAIL",
+            r["name"],
+            f"{r['dt']:.1e}",
+            _fmt_e(r["energy_rel_drift"], width=12),
+            _fmt_e(r["h_rel_drift"], width=12),
+        ])
+    _print_table(n_rows, headers=["ok", "case", "dt", "dE_rel", "dh_rel"])
 
-    report["suites"].append(
-        {"suite": "newton", "ok": ok_newton, "n_cases": len(newton_cases), "results": newton_results}
-    )
+    report["suites"].append({
+        "suite": "newton",
+        "ok": ok_newton,
+        "n_cases": len(newton_cases),
+        "results": newton_results
+    })
 
-    # -------------------------
+    # ----------------------------
     # Schwarzschild
-    # -------------------------
+    # ----------------------------
     schw_cases = cfg["suites"]["schwarzschild"]["cases"]
     schw_results: List[Dict[str, Any]] = []
-    ok_schw = True
+    ok_schw_cases = True
+
     for c in schw_cases:
-        r = _validate_schw(c, plotdir if args.plots else None)
-        schw_results.append(r)
-        ok_schw = ok_schw and r["passed"]
+        rr = _validate_schw(c, plotdir if args.plots else None)
+        rr["_sig"] = _schw_signature(c)
+        schw_results.append(rr)
+        ok_schw_cases = ok_schw_cases and rr["passed"]
 
-    print(f"Schwarzschild suite: ok={ok_schw} cases={len(schw_cases)}")
-    for r in schw_results:
-        tag = "PASS" if r["passed"] else "FAIL"
-        nu = r.get("norm_u_abs_max", None)
-        nu_s = "None" if nu is None else f"{nu:.3e}"
-        rmin = r.get("r_min", float("nan"))
-        rend = r.get("r_end", float("nan"))
-        msg = r.get("message", "")
-        print(
-            f"[{tag}] {r['name']} | dt={r['dt']:.1e} | r_min={rmin:.6f} | r_end={rend:.6f} | "
-            f"eps_max={r['constraint_abs_max']:.3e} | norm_u_max={nu_s} | status={r['status']} | msg={msg}"
-        )
+    conv = _check_convergence_schw(schw_results, abs_tol=1e-9, rel_tol=0.25)
+    conv_ok = all(bool(x["passed"]) for x in conv) if conv else False
 
-    report["suites"].append(
-        {"suite": "schwarzschild", "ok": ok_schw, "n_cases": len(schw_cases), "results": schw_results}
+    ok_schw_total = bool(ok_schw_cases and conv_ok)
+
+    _print_header(
+        f"Schwarzschild suite: ok={ok_schw_total} "
+        f"(cases_ok={ok_schw_cases}, conv_ok={conv_ok}) cases={len(schw_cases)}"
     )
+
+    s_rows: List[List[str]] = []
+    for r in schw_results:
+        s_rows.append([
+            "PASS" if r["passed"] else "FAIL",
+            r["name"],
+            f"{r['dt']:.1e}",
+            _fmt_f(r.get("r_min"), width=10, prec=6),
+            _fmt_f(r.get("r_end"), width=10, prec=6),
+            _fmt_e(r.get("constraint_abs_max"), width=12),
+            _fmt_e(r.get("norm_u_abs_max"), width=12),
+            str(r.get("status", "")),
+            _short_msg(str(r.get("message", ""))),
+        ])
+    _print_table(
+        s_rows,
+        headers=["ok", "case", "dt", "r_min", "r_end", "eps_max", "norm_u", "status", "msg"]
+    )
+
+    _print_header("Schwarzschild convergence: norm_u_abs_max should not increase when dt decreases (with tolerance)")
+    if not conv:
+        print("No comparable groups found. Need >=2 cases with same physics and different dt.")
+    else:
+        c_rows: List[List[str]] = []
+        for g in conv:
+            tag = "PASS" if g["passed"] else ("INCONCLUSIVE" if g.get("inconclusive") else "FAIL")
+            dts = ", ".join([f"{dt:.2e}" for dt in g["dts"]])
+            nus = ", ".join(["None" if v is None else f"{float(v):.3e}" for v in g["norm_u_abs_max"]])
+            c_rows.append([tag, dts, nus, ", ".join(g["cases"])])
+        _print_table(c_rows, headers=["ok", "dt (big->small)", "norm_u_abs_max", "cases"])
+
+        for g in conv:
+            if g.get("violations"):
+                for v in g["violations"]:
+                    print(
+                        f"violation: dt {v['dt_big']:.2e}->{v['dt_small']:.2e} "
+                        f"norm_u {v['nu_big']:.3e}->{v['nu_small']:.3e} "
+                        f"(abs_tol={v['abs_tol']:.1e}, rel_tol={v['rel_tol']:.2f})"
+                    )
+
+    report["suites"].append({
+        "suite": "schwarzschild",
+        "ok": ok_schw_total,
+        "ok_cases": ok_schw_cases,
+        "ok_convergence": conv_ok,
+        "n_cases": len(schw_cases),
+        "results": schw_results,
+        "convergence": conv,
+    })
 
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
     if args.plots:
-        print(f"Plots em: {plotdir}")
+        print(f"\nPlots em: {plotdir}")
     print(f"Relatório em: {os.path.join(outdir, 'report.json')}")
 
 

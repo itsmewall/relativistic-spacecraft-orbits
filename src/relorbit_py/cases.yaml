@@ -1,3 +1,5 @@
+# src/relorbit_py/cases.yaml
+
 suites:
   newton:
     description: "Newtonian 2-body planar validation cases (energy + angular momentum drift)."
@@ -44,7 +46,10 @@ suites:
   schwarzschild:
     description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0,pr0)."
     cases:
-      - name: schwarzschild_circular_M1_r10
+      # ---------------------------
+      # Circular (3 dts) — mesmo físico, dt diferente
+      # ---------------------------
+      - name: schwarzschild_circular_M1_r10_dt1e3
         model: schwarzschild
         params:
           M: 1.0
@@ -52,9 +57,8 @@ suites:
           L: 3.779644730092272
           capture_r: 2.5
           capture_eps: 1.0e-12
-        # [r0, phi0]
-        state0: [10.0, 0.0]
-        span: [0.0, 200.0]
+        state0: [10.0, 0.0]   # [r0, phi0]
+        span: [0.0, 200.0]    # [tau0, tauf]
         solver:
           dt: 1.0e-3
         criteria:
@@ -62,7 +66,44 @@ suites:
           constraint_abs_max: 1.0e-10
           r_max_dev: 1.0e-3
 
-      - name: schwarzschild_plunge_M1_r5p8
+      - name: schwarzschild_circular_M1_r10_dt5e4
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.9561828874675149
+          L: 3.779644730092272
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [10.0, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 5.0e-4
+        criteria:
+          status: BOUND
+          constraint_abs_max: 1.0e-10
+          r_max_dev: 1.0e-3
+
+      - name: schwarzschild_circular_M1_r10_dt2p5e4
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.9561828874675149
+          L: 3.779644730092272
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [10.0, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 2.5e-4
+        criteria:
+          status: BOUND
+          constraint_abs_max: 1.0e-10
+          r_max_dev: 1.0e-3
+
+      # ---------------------------
+      # Plunge/Capture (3 dts) — mesmo físico, dt diferente
+      # ---------------------------
+      - name: schwarzschild_plunge_M1_r5p8_dt5e4
         model: schwarzschild
         params:
           M: 1.0
@@ -70,12 +111,47 @@ suites:
           L: 3.466162967069742
           capture_r: 2.5
           capture_eps: 1.0e-12
-        # pr0 < 0 => inbound (plunge/capture)
-        pr0: -0.02
+        pr0: -0.02            # inbound
         state0: [5.8, 0.0]
         span: [0.0, 200.0]
         solver:
           dt: 5.0e-4
+        criteria:
+          status: CAPTURE
+          constraint_abs_max: 1.0e-8
+          r_max_dev: null
+
+      - name: schwarzschild_plunge_M1_r5p8_dt2p5e4
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.9431662428100122
+          L: 3.466162967069742
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        pr0: -0.02
+        state0: [5.8, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 2.5e-4
+        criteria:
+          status: CAPTURE
+          constraint_abs_max: 1.0e-8
+          r_max_dev: null
+
+      - name: schwarzschild_plunge_M1_r5p8_dt1p25e4
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.9431662428100122
+          L: 3.466162967069742
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        pr0: -0.02
+        state0: [5.8, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 1.25e-4
         criteria:
           status: CAPTURE
           constraint_abs_max: 1.0e-8

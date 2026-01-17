@@ -1,14 +1,12 @@
-Perfeito. Vou te dar uma lista objetiva e executável, separada em “Correções (arrumar o que está frágil/errado)” e “Features (subir o projeto de nível)”. Vou ser específico: o que fazer, onde mexer, e como você sabe que ficou certo.
-
 CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
 
-1. Declarar convenções e unidades (obrigatório de banca)
+1. Declarar convenções e unidades (obrigatório de banca) 🆗
 
 * Criar `docs/conventions.md` e referenciar no README.
 * Definir explicitamente: sistema de unidades (geométricas com G=c=1 ou SI), assinatura do métrico, o que é M e o que é μ, e o significado de E e L (por unidade de massa).
 * Critério de aceitação: qualquer pessoa consegue ler e entender o que significam E/L/M/μ e em que unidade estão. Nada “implícito”.
 
-2. Consertar a validação Schwarzschild para não ser “constraint por construção”
+2. Consertar a validação Schwarzschild para não ser “constraint por construção” 🆗
 
 * No C++: garantir que `epsilon` NÃO seja calculado a partir da mesma identidade usada para “forçar” o estado (se estiver).
 * Implementar uma checagem independente: `norm_u = g_{μν} u^μ u^ν + 1` (para partícula massiva). Isso exige expor `u^t, u^r, u^phi` ou `dt/dτ, dr/dτ, dφ/dτ`.
