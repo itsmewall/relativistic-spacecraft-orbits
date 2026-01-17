@@ -1,3 +1,4 @@
+# src/relorbit_py/simulate.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -55,6 +56,51 @@ def _make_solver_cfg(case: Dict[str, Any]) -> Any:
     return cfg
 
 
+def _parse_pr0(case: Dict[str, Any]) -> float:
+    """
+    Regras:
+      - Se existir case["pr0"] -> usa.
+      - Senão, se existir case["params"]["pr0"] -> usa.
+      - Senão, se existir radial_dir -> aplica sinal em um "pr0_mag" se existir, senão 0.0.
+      - Se nada existir -> 0.0 (default legado).
+    """
+    params = case.get("params", {}) or {}
+
+    pr0_raw = case.get("pr0", None)
+    if pr0_raw is None:
+        pr0_raw = params.get("pr0", None)
+
+    if pr0_raw is not None:
+        return float(pr0_raw)
+
+    radial_dir = case.get("radial_dir", None)
+    if radial_dir is None:
+        radial_dir = params.get("radial_dir", None)
+
+    pr0_mag_raw = case.get("pr0_mag", None)
+    if pr0_mag_raw is None:
+        pr0_mag_raw = params.get("pr0_mag", None)
+
+    pr0_mag = float(pr0_mag_raw) if pr0_mag_raw is not None else 0.0
+
+    if radial_dir is None:
+        return 0.0
+
+    rd = radial_dir
+    if isinstance(rd, (int, float)):
+        return -abs(pr0_mag) if float(rd) < 0 else abs(pr0_mag)
+
+    if isinstance(rd, str):
+        s = rd.strip().lower()
+        if s in ("in", "inbound", "inward", "plunge", "capture", "neg", "negative", "-"):
+            return -abs(pr0_mag)
+        if s in ("out", "outbound", "outward", "pos", "positive", "+"):
+            return abs(pr0_mag)
+
+    # Não reconhecido -> default legado
+    return 0.0
+
+
 def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
     eng = rp.get_engine()
 
@@ -85,20 +131,23 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
         state0 = case.get("state0", None)
         if not isinstance(state0, list) or len(state0) < 2:
             raise ValueError(
-                f"Para Schwarzschild, state0 deve ser lista com pelo menos [r0, phi0]. "
+                "Para Schwarzschild, state0 deve ser lista com pelo menos [r0, phi0]. "
                 f"Recebido: {state0}"
             )
 
         r0 = float(state0[0])
         phi0 = float(state0[1])
 
+        pr0 = _parse_pr0(case)
+
         tau0, tauf = a0, af
 
         capture_r = float(params.get("capture_r", 2.0))
         capture_eps = float(params.get("capture_eps", 1e-12))
 
+        # Nova assinatura: ... r0, phi0, pr0, tau0, tauf, cfg, ...
         return eng.simulate_schwarzschild_equatorial_rk4(
-            M, E, L, r0, phi0, tau0, tauf, cfg, capture_r, capture_eps
+            M, E, L, r0, phi0, pr0, tau0, tauf, cfg, capture_r, capture_eps
         )
 
     raise ValueError(f"Modelo desconhecido no caso '{case.get('name','<sem-nome>')}': {model}")

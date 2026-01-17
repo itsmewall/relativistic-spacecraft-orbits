@@ -85,6 +85,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double L,
     double r0,
     double phi0,
+    double pr0,
     double tau0,
     double tauf,
     const SolverCfg& cfg,

@@ -98,16 +98,26 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("r0", &relorbit::TrajectorySchwarzschildEq::r0)
         .def_readonly("phi0", &relorbit::TrajectorySchwarzschildEq::phi0);
 
-    m.def("simulate_schwarzschild_equatorial_rk4", &relorbit::simulate_schwarzschild_equatorial_rk4,
-          py::arg("M"),
-          py::arg("E"),
-          py::arg("L"),
-          py::arg("r0"),
-          py::arg("phi0"),
-          py::arg("tau0"),
-          py::arg("tauf"),
-          py::arg("cfg"),
-          py::arg("capture_r") = 2.0,
-          py::arg("capture_eps") = 1e-12,
-          "Simulate Schwarzschild equatorial timelike geodesic with RK4 in proper time tau.");
+    // --- Schw: ponteiro explícito para fixar a assinatura nova (com pr0) ---
+    using SchwFn = relorbit::TrajectorySchwarzschildEq (*)(
+        double, double, double, double, double, double, double, double,
+        const relorbit::SolverCfg&, double, double
+    );
+    SchwFn schw_fn = &relorbit::simulate_schwarzschild_equatorial_rk4;
+
+    m.def(
+        "simulate_schwarzschild_equatorial_rk4",
+        schw_fn,
+        py::arg("M"),
+        py::arg("E"),
+        py::arg("L"),
+        py::arg("r0"),
+        py::arg("phi0"),
+        py::arg("pr0"),
+        py::arg("tau0"),
+        py::arg("tauf"),
+        py::arg("cfg"),
+        py::arg("capture_r") = 2.0,
+        py::arg("capture_eps") = 1e-12
+    );
 }

@@ -47,12 +47,14 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double L,
     double r0,
     double phi0,
+    double pr0,
     double tau0,
     double tauf,
     const SolverCfg& cfg,
     double capture_r,
     double capture_eps
-) {
+)
+{
     if (M <= 0) throw std::runtime_error("M must be > 0");
     if (r0 <= 2.0 * M) throw std::runtime_error("r0 must be > 2M");
     if (tauf <= tau0) throw std::runtime_error("tauf must be > tau0");
@@ -64,7 +66,12 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         if (n < 1) n = 1;
     }
     const double dt = (tauf - tau0) / static_cast<double>(n);
-
+    const double V0 = Veff_schw(M, r0, L);
+    const double tol_ic = 1e-12;
+    if ((E * E - V0) < -tol_ic) {
+        throw std::runtime_error("condicoes iniciais impossiveis: E^2 < Veff(r0) (sem pr real)");
+    }
+    
     TrajectorySchwarzschildEq out;
     out.M = M; out.E = E; out.L = L; out.r0 = r0; out.phi0 = phi0;
 
@@ -84,7 +91,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
 
     // pr0: se você quiser inbound/outbound, isso vira parâmetro (vamos fazer depois).
     // Por ora, default = turning point
-    s.pr = 0.0;
+    s.pr = pr0;
 
     double tau = tau0;
 
@@ -109,6 +116,8 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     const double r_capture = capture_r * M;
 
     for (int i = 0; i < n; ++i) {
+        const double r_prev = s.r;
+
         const auto k1 = f_schw(M, E, L, s);
 
         SchwState s2 { s.tcoord + 0.5*dt*k1.tcoord, s.r + 0.5*dt*k1.r, s.phi + 0.5*dt*k1.phi, s.pr + 0.5*dt*k1.pr };
@@ -144,6 +153,12 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             out.status = OrbitStatus::UNBOUND;
             out.message = "unbound: r grew too large";
             break;
+        }
+
+        if (r_prev > r_capture && s.r <= r_capture + capture_eps) {
+            out.status = OrbitStatus::CAPTURE;
+            out.message = "capture: r crossed capture radius";
+            break;  
         }
     }
 

@@ -1,3 +1,4 @@
+# src/relorbit_py/validate.py
 from __future__ import annotations
 
 import argparse
@@ -113,6 +114,44 @@ def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
     _savefig(os.path.join(outdir, f"{case_name}_drift.png"))
 
 
+def _compute_norm_u_fallback(traj: Any) -> np.ndarray:
+    """
+    Fallback: calcula norm_u = g(u,u)+1 (deve tender a 0) usando campos do traj.
+    Requer: M, E, L, tau, r, pr.
+    """
+    tau = np.array(traj.tau, dtype=float)
+    r = np.array(traj.r, dtype=float)
+
+    if not hasattr(traj, "pr"):
+        raise AttributeError("Trajetória Schwarzschild não possui pr; não consigo calcular norm_u fallback.")
+
+    M = float(getattr(traj, "M"))
+    Epar = float(getattr(traj, "E"))
+    Lpar = float(getattr(traj, "L"))
+    pr = np.array(getattr(traj, "pr"), dtype=float)
+
+    if pr.size != tau.size:
+        raise ValueError(
+            f"pr size mismatch: len(pr)={pr.size} len(tau)={tau.size}. "
+            "Não consigo calcular norm_u fallback."
+        )
+
+    A = 1.0 - 2.0 * M / r
+    A = np.where(A <= 0.0, np.nan, A)
+
+    ut = Epar / A
+    ur = pr
+    uphi = Lpar / (r * r)
+
+    gtt = -A
+    grr = 1.0 / A
+    gpp = r * r
+
+    guu = gtt * ut * ut + grr * ur * ur + gpp * uphi * uphi
+    norm_u = guu + 1.0
+    return norm_u
+
+
 def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
     tau = np.array(traj.tau, dtype=float)
     r = np.array(traj.r, dtype=float)
@@ -156,32 +195,21 @@ def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_constraint_log.png"))
 
-    # norm_u: usa se o engine forneceu; se não, calcula
-    norm_u = None
+    # norm_u: regra dura
+    # - se traj.norm_u existe, tamanho TEM que bater com tau; senão: erro claro e NÃO PLOTA
+    # - se não existe, calcula fallback e plota.
+    norm_u: Optional[np.ndarray] = None
+
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
-        if nu.size == tau.size and nu.size > 0:
-            norm_u = nu
-
-    if norm_u is None:
-        M = float(getattr(traj, "M"))
-        Epar = float(getattr(traj, "E"))
-        Lpar = float(getattr(traj, "L"))
-        pr = np.array(getattr(traj, "pr"), dtype=float)
-
-        A = 1.0 - 2.0*M/r
-        A = np.where(A <= 0.0, np.nan, A)
-
-        ut = Epar / A
-        ur = pr
-        uphi = Lpar / (r*r)
-
-        gtt = -A
-        grr = 1.0 / A
-        gpp = r*r
-
-        guu = gtt*ut*ut + grr*ur*ur + gpp*uphi*uphi
-        norm_u = guu + 1.0
+        if nu.size != tau.size:
+            raise ValueError(
+                f"norm_u size mismatch em '{case_name}': len(norm_u)={nu.size} len(tau)={tau.size}. "
+                "Nao vou plotar norm_u. Conserte o engine para preencher norm_u com o mesmo N de tau."
+            )
+        norm_u = nu
+    else:
+        norm_u = _compute_norm_u_fallback(traj)
 
     plt.figure()
     plt.plot(tau, norm_u, label="norm_u = g(u,u)+1")
@@ -243,15 +271,27 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
 def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[str, Any]:
     traj = _unwrap_traj(simulate_case(case, "schwarzschild"))
 
+    tau = np.array(traj.tau, dtype=float)
+
     eps = np.array(traj.epsilon, dtype=float)
     eps_max = float(np.max(np.abs(eps)))
 
-    # norm_u (se existir)
-    norm_u_max = None
+    # norm_u_abs_max: regra dura se engine fornecer norm_u com shape errado
+    norm_u_abs_max: Optional[float] = None
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
+        if nu.size != tau.size:
+            raise ValueError(
+                f"norm_u size mismatch em '{case.get('name','<sem-nome>')}': len(norm_u)={nu.size} len(tau)={tau.size}. "
+                "Nao vou computar/plotar norm_u. Conserte o engine."
+            )
         if nu.size > 0:
-            norm_u_max = float(np.nanmax(np.abs(nu)))
+            norm_u_abs_max = float(np.nanmax(np.abs(nu)))
+    else:
+        # fallback consistente (e garante que norm_u_abs_max exista)
+        nu_fb = _compute_norm_u_fallback(traj)
+        if nu_fb.size > 0:
+            norm_u_abs_max = float(np.nanmax(np.abs(nu_fb)))
 
     crit = case.get("criteria", {}) or {}
     eps_max_allowed = float(crit.get("constraint_abs_max", 1e-10))
@@ -285,7 +325,7 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "dt": dt,
         "n_steps": int(n_steps),
         "constraint_abs_max": float(eps_max),
-        "norm_u_abs_max": norm_u_max,
+        "norm_u_abs_max": norm_u_abs_max,
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
