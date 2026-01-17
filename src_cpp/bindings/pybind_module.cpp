@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 #include "relorbit/types.hpp"
 #include "relorbit/api.hpp"
@@ -90,6 +91,17 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("ur_fd", &relorbit::TrajectorySchwarzschildEq::ur_fd)
         .def_readonly("uphi_fd", &relorbit::TrajectorySchwarzschildEq::uphi_fd)
         .def_readonly("norm_u", &relorbit::TrajectorySchwarzschildEq::norm_u)
+
+        // =========================
+        // NOVO: eventos (para validate.py)
+        // =========================
+        .def_readonly("event_kind", &relorbit::TrajectorySchwarzschildEq::event_kind)
+        .def_readonly("event_tau", &relorbit::TrajectorySchwarzschildEq::event_tau)
+        .def_readonly("event_tcoord", &relorbit::TrajectorySchwarzschildEq::event_tcoord)
+        .def_readonly("event_r", &relorbit::TrajectorySchwarzschildEq::event_r)
+        .def_readonly("event_phi", &relorbit::TrajectorySchwarzschildEq::event_phi)
+        .def_readonly("event_pr", &relorbit::TrajectorySchwarzschildEq::event_pr)
+
         .def_readonly("status", &relorbit::TrajectorySchwarzschildEq::status)
         .def_readonly("message", &relorbit::TrajectorySchwarzschildEq::message)
         .def_readonly("M", &relorbit::TrajectorySchwarzschildEq::M)

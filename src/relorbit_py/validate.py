@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -129,6 +130,58 @@ def _short_msg(msg: str, maxlen: int = 76) -> str:
 
 
 # ============================================================
+# Eventos (Schwarzschild)
+# ============================================================
+
+def _extract_events(traj: Any) -> List[Dict[str, Any]]:
+    """Extrai eventos do objeto traj (se existirem) em formato estável para report."""
+    if not hasattr(traj, "event_kind"):
+        return []
+
+    kind = list(getattr(traj, "event_kind"))
+    tau = list(getattr(traj, "event_tau", []))
+    tcoord = list(getattr(traj, "event_tcoord", []))
+    r = list(getattr(traj, "event_r", []))
+    phi = list(getattr(traj, "event_phi", []))
+    pr = list(getattr(traj, "event_pr", []))
+
+    n = min(len(kind), len(tau), len(tcoord), len(r), len(phi), len(pr))
+    events: List[Dict[str, Any]] = []
+    for i in range(n):
+        events.append({
+            "kind": str(kind[i]),
+            "tau": float(tau[i]),
+            "tcoord": float(tcoord[i]),
+            "r": float(r[i]),
+            "phi": float(phi[i]),
+            "pr": float(pr[i]),
+            "i": int(i),
+        })
+
+    # Ordena por tau (defensivo)
+    events.sort(key=lambda e: float(e.get("tau", 0.0)))
+    return events
+
+
+def _events_compact_str(events: List[Dict[str, Any]], max_items: int = 6) -> str:
+    if not events:
+        return ""
+    chunks = []
+    for e in events[:max_items]:
+        chunks.append(f"{e['kind']}@{float(e['tau']):.6g}")
+    if len(events) > max_items:
+        chunks.append(f"+{len(events) - max_items}")
+    return "; ".join(chunks)
+
+
+def _events_to_kind_map(events: List[Dict[str, Any]]) -> Dict[str, List[float]]:
+    mp: Dict[str, List[float]] = defaultdict(list)
+    for e in events:
+        mp[str(e.get("kind", ""))].append(float(e.get("tau", 0.0)))
+    return mp
+
+
+# ============================================================
 # Plotting
 # ============================================================
 
@@ -211,7 +264,6 @@ def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_constraint_log.png"))
 
-    # norm_u: só plota se for compatível com tau
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
         if len(nu) != len(tau):
@@ -321,6 +373,7 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     Epar = float(params.get("E", case.get("E")))
     Lpar = float(params.get("L", case.get("L")))
     pr0 = _case_pr0(case)
+    events = _extract_events(traj)
 
     if plotdir is not None:
         _plot_schw(case["name"], traj, plotdir)
@@ -343,6 +396,7 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "r_end": r_end,
         "constraint_abs_max": float(eps_max) if eps_max is not None else None,
         "norm_u_abs_max": norm_u_max,
+        "events": events,
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
@@ -424,6 +478,8 @@ def _check_convergence_schw(
                 "dts": dts,
                 "norm_u_abs_max": nus_raw,
                 "violations": [],
+                "abs_tol": abs_tol,
+                "rel_tol": rel_tol,
             })
             continue
 
@@ -455,6 +511,166 @@ def _check_convergence_schw(
             "violations": violations,
             "abs_tol": abs_tol,
             "rel_tol": rel_tol,
+        })
+
+    return conv_reports
+
+
+def _check_convergence_events_schw(
+    results: List[Dict[str, Any]],
+    abs_tol_factor: float = 2.0,
+    rel_tol: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """
+    Convergência dos instantes de eventos quando dt diminui.
+
+    Critério local (par a par, dt_big -> dt_small):
+      |tau_small - tau_big| <= abs_tol_factor*dt_small + rel_tol*max(|tau_big|,1)
+
+    Matching: por 'kind' e índice de ocorrência dentro de cada kind.
+
+    Regra adicional (crítica):
+      - Se um grupo não produz eventos em nenhuma execução, isso é N/A e NÃO deve reprovar.
+      - Se um grupo produz eventos em algumas execuções e em outras não, isso é FAIL (inconsistente).
+    """
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in results:
+        key = r.get("_sig", None)
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(r)
+
+    conv_reports: List[Dict[str, Any]] = []
+
+    for _key, grp in groups.items():
+        if len(grp) < 2:
+            continue
+
+        grp_sorted = sorted(grp, key=lambda x: float(x.get("dt", 0.0)), reverse=True)
+
+        dts = [float(g.get("dt", 0.0)) for g in grp_sorted]
+        names = [g.get("name", "") for g in grp_sorted]
+
+        ev_lists = [g.get("events", None) for g in grp_sorted]
+        if any(v is None for v in ev_lists):
+            conv_reports.append({
+                "passed": False,
+                "inconclusive": True,
+                "reason": "missing events field in at least one run",
+                "cases": names,
+                "dts": dts,
+                "violations": [],
+                "mismatches": [],
+                "abs_tol_factor": abs_tol_factor,
+                "rel_tol": rel_tol,
+            })
+            continue
+
+        counts = [len(list(v or [])) for v in ev_lists]
+        has_any = any(c > 0 for c in counts)
+        has_all = all(c > 0 for c in counts)
+
+        # Caso 1: nenhum evento em nenhuma run -> N/A (passa, mas marca skipped)
+        if not has_any:
+            conv_reports.append({
+                "passed": True,
+                "skipped": True,
+                "inconclusive": False,
+                "reason": "no events detected in any run for this group (N/A)",
+                "cases": names,
+                "dts": dts,
+                "violations": [],
+                "mismatches": [],
+                "abs_tol_factor": abs_tol_factor,
+                "rel_tol": rel_tol,
+            })
+            continue
+
+        # Caso 2: alguns têm eventos e outros não -> FAIL (inconsistente)
+        if has_any and not has_all:
+            conv_reports.append({
+                "passed": False,
+                "skipped": False,
+                "inconclusive": False,
+                "reason": "events detected in some runs but not all (inconsistent event detection)",
+                "cases": names,
+                "dts": dts,
+                "counts": counts,
+                "violations": [],
+                "mismatches": [{"kind": "*", "detail": "some runs have events, others do not"}],
+                "abs_tol_factor": abs_tol_factor,
+                "rel_tol": rel_tol,
+            })
+            continue
+
+        # Caso 3: todas têm eventos -> faz comparação
+        ok = True
+        violations: List[Dict[str, Any]] = []
+        mismatches: List[Dict[str, Any]] = []
+
+        for i in range(len(grp_sorted) - 1):
+            g_big = grp_sorted[i]
+            g_small = grp_sorted[i + 1]
+
+            dt_big = float(g_big.get("dt", 0.0))
+            dt_small = float(g_small.get("dt", 0.0))
+            abs_tol = abs_tol_factor * (dt_small if dt_small > 0.0 else dt_big)
+
+            ev_big = list(g_big.get("events", []) or [])
+            ev_small = list(g_small.get("events", []) or [])
+
+            mp_big = _events_to_kind_map(ev_big)
+            mp_small = _events_to_kind_map(ev_small)
+
+            kinds = sorted(set(mp_big.keys()) | set(mp_small.keys()))
+
+            for kind in kinds:
+                a = mp_big.get(kind, [])
+                b = mp_small.get(kind, [])
+
+                if len(a) != len(b):
+                    ok = False
+                    mismatches.append({
+                        "kind": kind,
+                        "dt_big": dt_big,
+                        "dt_small": dt_small,
+                        "count_big": len(a),
+                        "count_small": len(b),
+                        "tau_big": a,
+                        "tau_small": b,
+                    })
+
+                mlen = min(len(a), len(b))
+                for j in range(mlen):
+                    tau_big = float(a[j])
+                    tau_small = float(b[j])
+                    err = abs(tau_small - tau_big)
+                    allowed = abs_tol + rel_tol * max(abs(tau_big), 1.0)
+                    if err > allowed:
+                        ok = False
+                        violations.append({
+                            "kind": kind,
+                            "occurrence": j,
+                            "dt_big": dt_big,
+                            "dt_small": dt_small,
+                            "tau_big": tau_big,
+                            "tau_small": tau_small,
+                            "abs_err": err,
+                            "allowed": allowed,
+                            "abs_tol": abs_tol,
+                            "rel_tol": rel_tol,
+                        })
+
+        conv_reports.append({
+            "passed": bool(ok),
+            "skipped": False,
+            "inconclusive": False,
+            "cases": names,
+            "dts": dts,
+            "abs_tol_factor": abs_tol_factor,
+            "rel_tol": rel_tol,
+            "violations": violations,
+            "mismatches": mismatches,
         })
 
     return conv_reports
@@ -553,11 +769,14 @@ def main() -> None:
     conv = _check_convergence_schw(schw_results, abs_tol=1e-9, rel_tol=0.25)
     conv_ok = all(bool(x["passed"]) for x in conv) if conv else False
 
-    ok_schw_total = bool(ok_schw_cases and conv_ok)
+    events_conv = _check_convergence_events_schw(schw_results, abs_tol_factor=2.0, rel_tol=0.0)
+    events_conv_ok = all(bool(x["passed"]) for x in events_conv) if events_conv else False
+
+    ok_schw_total = bool(ok_schw_cases and conv_ok and events_conv_ok)
 
     _print_header(
         f"Schwarzschild suite: ok={ok_schw_total} "
-        f"(cases_ok={ok_schw_cases}, conv_ok={conv_ok}) cases={len(schw_cases)}"
+        f"(cases_ok={ok_schw_cases}, conv_ok={conv_ok}, events_conv_ok={events_conv_ok}) cases={len(schw_cases)}"
     )
 
     s_rows: List[List[str]] = []
@@ -577,6 +796,16 @@ def main() -> None:
         s_rows,
         headers=["ok", "case", "dt", "r_min", "r_end", "eps_max", "norm_u", "status", "msg"]
     )
+
+    _print_header("Schwarzschild events (per run)")
+    any_events = False
+    for r in schw_results:
+        evs = r.get("events", []) or []
+        if evs:
+            any_events = True
+            print(f"{r['name']} (dt={r['dt']:.2e}): {_events_compact_str(evs)}")
+    if not any_events:
+        print("No events detected in these runs.")
 
     _print_header("Schwarzschild convergence: norm_u_abs_max should not increase when dt decreases (with tolerance)")
     if not conv:
@@ -599,14 +828,43 @@ def main() -> None:
                         f"(abs_tol={v['abs_tol']:.1e}, rel_tol={v['rel_tol']:.2f})"
                     )
 
+    _print_header("Schwarzschild convergence: event times should change little when dt decreases")
+    if not events_conv:
+        print("No comparable groups found. Need >=2 cases with same physics and different dt.")
+    else:
+        e_rows: List[List[str]] = []
+        for g in events_conv:
+            tag = "PASS" if g["passed"] else ("SKIP" if g.get("skipped") else ("INCONCLUSIVE" if g.get("inconclusive") else "FAIL"))
+            dts = ", ".join([f"{dt:.2e}" for dt in g["dts"]])
+            reason = str(g.get("reason", "")) if (g.get("skipped") or g.get("inconclusive")) else ""
+            e_rows.append([tag, dts, ", ".join(g["cases"]), reason])
+        _print_table(e_rows, headers=["ok", "dt (big->small)", "cases", "reason"])
+
+        for g in events_conv:
+            for mm in g.get("mismatches", []) or []:
+                print(
+                    "mismatch: "
+                    f"{mm.get('kind','?')} count dt {mm.get('dt_big',0.0):.2e}->{mm.get('dt_small',0.0):.2e} "
+                    f"{mm.get('count_big','?')}->{mm.get('count_small','?')}"
+                )
+            for v in g.get("violations", []) or []:
+                print(
+                    f"violation: {v['kind']}[{v['occurrence']}] dt {v['dt_big']:.2e}->{v['dt_small']:.2e} "
+                    f"tau {v['tau_big']:.6g}->{v['tau_small']:.6g} "
+                    f"abs_err={v['abs_err']:.3e} allowed={v['allowed']:.3e} "
+                    f"(abs_tol={v['abs_tol']:.3e}, rel_tol={v['rel_tol']:.2f})"
+                )
+
     report["suites"].append({
         "suite": "schwarzschild",
         "ok": ok_schw_total,
         "ok_cases": ok_schw_cases,
         "ok_convergence": conv_ok,
+        "ok_events_convergence": events_conv_ok,
         "n_cases": len(schw_cases),
         "results": schw_results,
         "convergence": conv,
+        "events_convergence": events_conv,
     })
 
     os.makedirs(outdir, exist_ok=True)

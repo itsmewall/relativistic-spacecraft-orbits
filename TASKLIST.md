@@ -2,25 +2,25 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
 
 1. Declarar convenções e unidades (obrigatório de banca) 🆗
 
-* Criar `docs/conventions.md` e referenciar no README.
-* Definir explicitamente: sistema de unidades (geométricas com G=c=1 ou SI), assinatura do métrico, o que é M e o que é μ, e o significado de E e L (por unidade de massa).
-* Critério de aceitação: qualquer pessoa consegue ler e entender o que significam E/L/M/μ e em que unidade estão. Nada “implícito”.
+    * Criar `docs/conventions.md` e referenciar no README.
+    * Definir explicitamente: sistema de unidades (geométricas com G=c=1 ou SI), assinatura do métrico, o que é M e o que é μ, e o significado de E e L (por unidade de massa).
+    * Critério de aceitação: qualquer pessoa consegue ler e entender o que significam E/L/M/μ e em que unidade estão. Nada “implícito”.
 
 2. Consertar a validação Schwarzschild para não ser “constraint por construção” 🆗
 
-* No C++: garantir que `epsilon` NÃO seja calculado a partir da mesma identidade usada para “forçar” o estado (se estiver).
-* Implementar uma checagem independente: `norm_u = g_{μν} u^μ u^ν + 1` (para partícula massiva). Isso exige expor `u^t, u^r, u^phi` ou `dt/dτ, dr/dτ, dφ/dτ`.
-* Onde: `src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp` e a struct de output; depois expor via pybind.
-* Critério: `max|norm_u|` deve diminuir quando você reduz `dt` (teste de convergência).
+    * No C++: garantir que `epsilon` NÃO seja calculado a partir da mesma identidade usada para “forçar” o estado (se estiver).
+    * Implementar uma checagem independente: `norm_u = g_{μν} u^μ u^ν + 1` (para partícula massiva). Isso exige expor `u^t, u^r, u^phi` ou `dt/dτ, dr/dτ, dφ/dτ`.
+    * Onde: `src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp` e a struct de output; depois expor via pybind.
+    * Critério: `max|norm_u|` deve diminuir quando você reduz `dt` (teste de convergência).
 
 3. Event detection de verdade (horizonte e turning points)
 
-* Implementar detecção de eventos:
+    * Implementar detecção de eventos:
 
-  * Horizon crossing: raiz de `r(τ) - 2M = 0`.
-  * Turning point: `dr/dτ = 0` (periapse/apapse).
-* Onde: no integrador Schwarzschild no C++ (a função `simulate_schwarzschild_equatorial_rk4`), com “localização” simples (bissecção/secante no intervalo do passo).
-* Critério: o instante do evento muda pouco quando você reduz `dt` (convergência), e aparece no report.
+      * Horizon crossing: raiz de `r(τ) - 2M = 0`.
+      * Turning point: `dr/dτ = 0` (periapse/apapse).
+    * Onde: no integrador Schwarzschild no C++ (a função `simulate_schwarzschild_equatorial_rk4`), com “localização” simples (bissecção/secante no intervalo do passo).
+    * Critério: o instante do evento muda pouco quando você reduz `dt` (convergência), e aparece no report.
 
 4. Corrigir classificação BOUND/UNBOUND/CAPTURE (Newton e Schwarzschild)
 

@@ -1,44 +1,53 @@
+// src_cpp/lib/schwarzschild_equatorial.cpp
 #include "relorbit/models/schwarzschild_equatorial.hpp"
-#include <stdexcept>
-#include <cmath>
+
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <sstream>
 
 namespace relorbit {
 
-struct SchwState {
-    double tcoord; // t
-    double r;      // r
-    double phi;    // phi
-    double pr;     // dr/dtau
-};
-
-static inline SchwState f_schw(double M, double E, double L, const SchwState& s) {
-    const double A = 1.0 - 2.0 * M / s.r; // 1 - 2M/r
-
-    SchwState ds;
-    ds.tcoord = E / A;                         // dt/dtau
-    ds.r      = s.pr;                          // dr/dtau
-    ds.phi    = L / (s.r * s.r);               // dphi/dtau
-    ds.pr     = -0.5 * dVeff_dr_schw(M, s.r, L); // dpr/dtau
-    return ds;
+static inline bool is_finite(double x) {
+    return std::isfinite(x);
 }
 
-static inline double fd_first(const std::vector<double>& x, const std::vector<double>& t, size_t i) {
-    const size_t n = x.size();
-    if (n < 2) return 0.0;
+static inline void push_event(
+    TrajectorySchwarzschildEq& traj,
+    const std::string& kind,
+    double tau, double tcoord, double r, double phi, double pr
+) {
+    traj.event_kind.push_back(kind);
+    traj.event_tau.push_back(tau);
+    traj.event_tcoord.push_back(tcoord);
+    traj.event_r.push_back(r);
+    traj.event_phi.push_back(phi);
+    traj.event_pr.push_back(pr);
+}
 
-    if (i == 0) {
-        const double dt = t[1] - t[0];
-        return (dt != 0.0) ? (x[1] - x[0]) / dt : 0.0;
-    }
-    if (i == n - 1) {
-        const double dt = t[n-1] - t[n-2];
-        return (dt != 0.0) ? (x[n-1] - x[n-2]) / dt : 0.0;
-    }
+static inline double safe_A(double M, double r) {
+    return 1.0 - 2.0 * M / r;
+}
 
-    const double dt = t[i+1] - t[i-1];
-    return (dt != 0.0) ? (x[i+1] - x[i-1]) / dt : 0.0;
+// ODE RHS em tau: state = [r, phi, tcoord, pr]
+static inline void rhs_schw_eq(double M, double E, double L,
+                               double r, double phi, double tcoord, double pr,
+                               double& dr, double& dphi, double& dt, double& dpr) {
+    (void)phi;
+    (void)tcoord;
+
+    // dr/dtau = pr
+    dr = pr;
+
+    // dphi/dtau = L/r^2
+    dphi = L / (r * r);
+
+    // dt/dtau = E / (1 - 2M/r)
+    const double A = safe_A(M, r);
+    dt = E / A;
+
+    // dpr/dtau = -(1/2) dVeff/dr
+    dpr = -0.5 * dVeff_dr_schw(M, r, L);
 }
 
 TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
@@ -53,180 +62,274 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     const SolverCfg& cfg,
     double capture_r,
     double capture_eps
-)
-{
-    if (M <= 0) throw std::runtime_error("M must be > 0");
-    if (r0 <= 2.0 * M) throw std::runtime_error("r0 must be > 2M");
-    if (tauf <= tau0) throw std::runtime_error("tauf must be > tau0");
-    if (!(capture_r > 0.0)) throw std::runtime_error("capture_r must be > 0");
-    if (!(capture_eps >= 0.0)) throw std::runtime_error("capture_eps must be >= 0");
+) {
+    TrajectorySchwarzschildEq traj;
+    traj.M = M;
+    traj.E = E;
+    traj.L = L;
+    traj.r0 = r0;
+    traj.phi0 = phi0;
 
-    int n = cfg.n_steps;
-    if (n <= 0) {
-        if (cfg.dt <= 0) throw std::runtime_error("cfg.dt must be > 0 if n_steps==0");
-        n = static_cast<int>(std::ceil((tauf - tau0) / cfg.dt));
-        if (n < 1) n = 1;
+    traj.status = OrbitStatus::BOUND;  // <<< CRÍTICO: default de sucesso (se nada der errado)
+    traj.message.clear();
+
+    const double dt0 = cfg.dt;
+    if (!(dt0 > 0.0) || !is_finite(dt0)) {
+        traj.status = OrbitStatus::ERROR;
+        traj.message = "invalid dt (must be > 0)";
+        return traj;
     }
-    const double dt = (tauf - tau0) / static_cast<double>(n);
-
-    // Coerencia fisica basica: E^2 - Veff(r0) deve ser >= 0 (radial real)
-    const double V0 = Veff_schw(M, r0, L);
-    const double tol_ic = 1e-12;
-    if ((E * E - V0) < -tol_ic) {
-        throw std::runtime_error("condicoes iniciais impossiveis: E^2 < Veff(r0) (sem pr real)");
+    if (!(tauf >= tau0) || !is_finite(tau0) || !is_finite(tauf)) {
+        traj.status = OrbitStatus::ERROR;
+        traj.message = "invalid tau span";
+        return traj;
     }
 
-    TrajectorySchwarzschildEq out;
-    out.M = M; out.E = E; out.L = L; out.r0 = r0; out.phi0 = phi0;
+    const double r_cap = capture_r * M; // regra: r <= capture_r * M
 
-    out.tau.reserve(static_cast<size_t>(n) + 1);
-    out.r.reserve(static_cast<size_t>(n) + 1);
-    out.phi.reserve(static_cast<size_t>(n) + 1);
-    out.tcoord.reserve(static_cast<size_t>(n) + 1);
-    out.pr.reserve(static_cast<size_t>(n) + 1);
-    out.epsilon.reserve(static_cast<size_t>(n) + 1);
-    out.E_series.reserve(static_cast<size_t>(n) + 1);
-    out.L_series.reserve(static_cast<size_t>(n) + 1);
+    // passos
+    int n_steps = cfg.n_steps;
+    if (n_steps <= 0) {
+        const double span = (tauf - tau0);
+        n_steps = static_cast<int>(std::ceil(span / dt0));
+        if (n_steps < 1) n_steps = 1;
+    }
 
-    SchwState s;
-    s.tcoord = 0.0;
-    s.r = r0;
-    s.phi = phi0;
-    s.pr = pr0;
+    // reserva
+    traj.tau.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.r.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.phi.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.tcoord.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.pr.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.epsilon.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.E_series.reserve(static_cast<size_t>(n_steps) + 1);
+    traj.L_series.reserve(static_cast<size_t>(n_steps) + 1);
 
+    // estado inicial
     double tau = tau0;
+    double r = r0;
+    double phi = phi0;
+    double tcoord = 0.0; // pode começar em 0, pois só diferenças importam
+    double pr = pr0;
 
-    out.status = OrbitStatus::BOUND;
-    out.message.clear();
+    auto append_sample = [&](double tau_s, double r_s, double phi_s, double t_s, double pr_s) {
+        traj.tau.push_back(tau_s);
+        traj.r.push_back(r_s);
+        traj.phi.push_back(phi_s);
+        traj.tcoord.push_back(t_s);
+        traj.pr.push_back(pr_s);
 
-    auto push = [&]() {
-        out.tau.push_back(tau);
-        out.r.push_back(s.r);
-        out.phi.push_back(s.phi);
-        out.tcoord.push_back(s.tcoord);
-        out.pr.push_back(s.pr);
+        const double eps = pr_s * pr_s + Veff_schw(M, r_s, L) - E * E;
+        traj.epsilon.push_back(eps);
 
-        const double eps = (s.pr * s.pr) + Veff_schw(M, s.r, L) - (E * E);
-        out.epsilon.push_back(eps);
-
-        out.E_series.push_back(E);
-        out.L_series.push_back(L);
+        traj.E_series.push_back(E);
+        traj.L_series.push_back(L);
     };
 
-    // Raio de captura efetivo (em coordenada r)
-    const double r_cap = capture_r * M;
-
-    push();
-
-    // Se já começou dentro do raio de captura (caso raro, mas define comportamento)
-    if (s.r <= r_cap + capture_eps) {
-        out.status = OrbitStatus::CAPTURE;
-        std::ostringstream oss;
-        oss << "capture: started inside capture radius (r_cap=" << r_cap
-            << ", capture_r=" << capture_r << ", M=" << M << ")";
-        out.message = oss.str();
-        // ainda fazemos pós-processamento FD com N=1 (vai dar 0.0), ok.
-        // return out;  // opcional: pode retornar direto
+    // validações básicas iniciais
+    if (!is_finite(r) || !(r > 2.0 * M) || !is_finite(phi) || !is_finite(pr)) {
+        traj.status = OrbitStatus::ERROR;
+        traj.message = "invalid initial state (r must be > 2M and finite)";
+        return traj;
     }
 
-    for (int i = 0; i < n; ++i) {
-        const double r_prev = s.r;
+    append_sample(tau, r, phi, tcoord, pr);
 
-        const auto k1 = f_schw(M, E, L, s);
+    // integração
+    for (int step = 0; step < n_steps; ++step) {
+        // ajusta último passo para bater em tauf
+        double h = dt0;
+        if (tau + h > tauf) h = (tauf - tau);
+        if (!(h > 0.0)) break;
 
-        SchwState s2 { s.tcoord + 0.5*dt*k1.tcoord,
-                       s.r      + 0.5*dt*k1.r,
-                       s.phi    + 0.5*dt*k1.phi,
-                       s.pr     + 0.5*dt*k1.pr };
-        const auto k2 = f_schw(M, E, L, s2);
+        // guarda prev
+        const double tau_prev = tau;
+        const double r_prev = r;
+        const double phi_prev = phi;
+        const double t_prev = tcoord;
+        const double pr_prev = pr;
 
-        SchwState s3 { s.tcoord + 0.5*dt*k2.tcoord,
-                       s.r      + 0.5*dt*k2.r,
-                       s.phi    + 0.5*dt*k2.phi,
-                       s.pr     + 0.5*dt*k2.pr };
-        const auto k3 = f_schw(M, E, L, s3);
+        // RK4
+        double k1_r, k1_phi, k1_t, k1_pr;
+        rhs_schw_eq(M, E, L, r, phi, tcoord, pr, k1_r, k1_phi, k1_t, k1_pr);
 
-        SchwState s4 { s.tcoord + dt*k3.tcoord,
-                       s.r      + dt*k3.r,
-                       s.phi    + dt*k3.phi,
-                       s.pr     + dt*k3.pr };
-        const auto k4 = f_schw(M, E, L, s4);
+        double r2 = r + 0.5 * h * k1_r;
+        double p2 = phi + 0.5 * h * k1_phi;
+        double t2 = tcoord + 0.5 * h * k1_t;
+        double pr2 = pr + 0.5 * h * k1_pr;
 
-        s.tcoord += (dt/6.0) * (k1.tcoord + 2.0*k2.tcoord + 2.0*k3.tcoord + k4.tcoord);
-        s.r      += (dt/6.0) * (k1.r      + 2.0*k2.r      + 2.0*k3.r      + k4.r);
-        s.phi    += (dt/6.0) * (k1.phi    + 2.0*k2.phi    + 2.0*k3.phi    + k4.phi);
-        s.pr     += (dt/6.0) * (k1.pr     + 2.0*k2.pr     + 2.0*k3.pr     + k4.pr);
+        double k2_r, k2_phi, k2_t, k2_pr;
+        rhs_schw_eq(M, E, L, r2, p2, t2, pr2, k2_r, k2_phi, k2_t, k2_pr);
 
-        tau += dt;
-        push();
+        double r3 = r + 0.5 * h * k2_r;
+        double p3 = phi + 0.5 * h * k2_phi;
+        double t3 = tcoord + 0.5 * h * k2_t;
+        double pr3 = pr + 0.5 * h * k2_pr;
 
-        if (!std::isfinite(s.r) || !std::isfinite(s.phi) || !std::isfinite(s.pr) || !std::isfinite(s.tcoord)) {
-            out.status = OrbitStatus::ERROR;
-            out.message = "non-finite state encountered";
+        double k3_r, k3_phi, k3_t, k3_pr;
+        rhs_schw_eq(M, E, L, r3, p3, t3, pr3, k3_r, k3_phi, k3_t, k3_pr);
+
+        double r4 = r + h * k3_r;
+        double p4 = phi + h * k3_phi;
+        double t4 = tcoord + h * k3_t;
+        double pr4 = pr + h * k3_pr;
+
+        double k4_r, k4_phi, k4_t, k4_pr;
+        rhs_schw_eq(M, E, L, r4, p4, t4, pr4, k4_r, k4_phi, k4_t, k4_pr);
+
+        double r_next = r + (h / 6.0) * (k1_r + 2.0 * k2_r + 2.0 * k3_r + k4_r);
+        double phi_next = phi + (h / 6.0) * (k1_phi + 2.0 * k2_phi + 2.0 * k3_phi + k4_phi);
+        double t_next = tcoord + (h / 6.0) * (k1_t + 2.0 * k2_t + 2.0 * k3_t + k4_t);
+        double pr_next = pr + (h / 6.0) * (k1_pr + 2.0 * k2_pr + 2.0 * k3_pr + k4_pr);
+        double tau_next = tau + h;
+
+        // sanity numérica
+        if (!is_finite(r_next) || !is_finite(phi_next) || !is_finite(t_next) || !is_finite(pr_next)) {
+            traj.status = OrbitStatus::ERROR;
+            traj.message = "non-finite state encountered";
             break;
         }
 
-        // CAPTURE por cruzamento (event detection simples)
-        if (r_prev > r_cap && s.r <= r_cap + capture_eps) {
-            out.status = OrbitStatus::CAPTURE;
+        // -----------------------------------------
+        // EVENTO: turning point (periapse/apoapse)
+        // -----------------------------------------
+        // Detecta crossing de pr = 0 no passo (linear em pr)
+        if (pr_prev != 0.0) {
+            const bool crossed = (pr_prev < 0.0 && pr_next >= 0.0) || (pr_prev > 0.0 && pr_next <= 0.0);
+            if (crossed) {
+                const double denom = (pr_prev - pr_next);
+                double alpha = 0.0;
+                if (std::abs(denom) > 0.0) alpha = pr_prev / denom; // alpha in [0,1] típico
+                alpha = std::clamp(alpha, 0.0, 1.0);
+
+                const double tau_ev = tau_prev + alpha * h;
+                const double r_ev = r_prev + alpha * (r_next - r_prev);
+                const double phi_ev = phi_prev + alpha * (phi_next - phi_prev);
+                const double t_ev = t_prev + alpha * (t_next - t_prev);
+                const double pr_ev = 0.0;
+
+                const std::string kind = (pr_prev < 0.0) ? "periapse" : "apoapse";
+                push_event(traj, kind, tau_ev, t_ev, r_ev, phi_ev, pr_ev);
+            }
+        }
+
+        // -----------------------------------------
+        // EVENTO: capture crossing (r cruza r_cap)
+        // -----------------------------------------
+        // regra: se veio de fora e cruzou pra dentro, registra e encerra
+        if ((r_prev > r_cap) && (r_next <= r_cap)) {
+            const double denom = (r_prev - r_next);
+            double alpha = 0.0;
+            if (std::abs(denom) > 0.0) alpha = (r_prev - r_cap) / denom;
+            alpha = std::clamp(alpha, 0.0, 1.0);
+
+            const double tau_ev = tau_prev + alpha * h;
+            const double phi_ev = phi_prev + alpha * (phi_next - phi_prev);
+            const double t_ev = t_prev + alpha * (t_next - t_prev);
+            const double pr_ev = pr_prev + alpha * (pr_next - pr_prev);
+
+            // anexa amostra exatamente no crossing
+            tau = tau_ev;
+            r = r_cap;
+            phi = phi_ev;
+            tcoord = t_ev;
+            pr = pr_ev;
+
+            append_sample(tau, r, phi, tcoord, pr);
+            push_event(traj, "capture", tau, tcoord, r, phi, pr);
+
+            traj.status = OrbitStatus::CAPTURE;
+
             std::ostringstream oss;
-            oss << "capture: r crossed capture radius (r_prev=" << r_prev
-                << ", r_now=" << s.r
+            oss.setf(std::ios::scientific);
+            oss << "capture: r crossed capture radius "
+                << "(r_prev=" << r_prev
+                << ", r_now=" << r_next
                 << ", r_cap=" << r_cap
                 << ", capture_r=" << capture_r
                 << ", M=" << M << ")";
-            out.message = oss.str();
+            traj.message = oss.str();
+
             break;
         }
 
-        if (s.r > 1e6 * M) {
-            out.status = OrbitStatus::UNBOUND;
-            out.message = "unbound: r grew too large";
+        // Se chegou aqui, aceita passo normal
+        tau = tau_next;
+        r = r_next;
+        phi = phi_next;
+        tcoord = t_next;
+        pr = pr_next;
+
+        // protege contra entrar no horizonte por acidente
+        if (!(r > 2.0 * M + capture_eps)) {
+            traj.status = OrbitStatus::ERROR;
+            traj.message = "r approached/entered horizon region (r <= 2M + eps)";
             break;
         }
+
+        append_sample(tau, r, phi, tcoord, pr);
+
+        // fim exato
+        if (tau >= tauf) break;
     }
 
-    // ============================
-    // Pós-processamento FD: u^μ e norm_u
-    // ============================
-    const size_t N = out.tau.size();
-    out.ut_fd.resize(N);
-    out.ur_fd.resize(N);
-    out.uphi_fd.resize(N);
-    out.norm_u.resize(N);
+    // =========================================
+    // Pós-processamento FD + norm_u
+    // =========================================
+    const size_t N = traj.tau.size();
+    traj.ut_fd.assign(N, 0.0);
+    traj.ur_fd.assign(N, 0.0);
+    traj.uphi_fd.assign(N, 0.0);
+    traj.norm_u.assign(N, 0.0);
 
-    // Quando A fica muito pequeno, 1/A explode e norm_u FD vira lixo numérico.
-    // Então, para A <= A_min, marcamos norm_u como NaN (o Python usa np.nanmax).
-    const double A_min = 1e-6;
+    if (N >= 2) {
+        // diferenças centradas internas, forward/backward nas bordas
+        for (size_t i = 0; i < N; ++i) {
+            double dtau;
+            double dt, dr, dphi;
 
-    for (size_t i = 0; i < N; ++i) {
-        const double ut = fd_first(out.tcoord, out.tau, i);
-        const double ur = fd_first(out.r, out.tau, i);
-        const double up = fd_first(out.phi, out.tau, i);
+            if (i == 0) {
+                dtau = traj.tau[1] - traj.tau[0];
+                dt = traj.tcoord[1] - traj.tcoord[0];
+                dr = traj.r[1] - traj.r[0];
+                dphi = traj.phi[1] - traj.phi[0];
+            } else if (i == N - 1) {
+                dtau = traj.tau[N - 1] - traj.tau[N - 2];
+                dt = traj.tcoord[N - 1] - traj.tcoord[N - 2];
+                dr = traj.r[N - 1] - traj.r[N - 2];
+                dphi = traj.phi[N - 1] - traj.phi[N - 2];
+            } else {
+                dtau = traj.tau[i + 1] - traj.tau[i - 1];
+                dt = traj.tcoord[i + 1] - traj.tcoord[i - 1];
+                dr = traj.r[i + 1] - traj.r[i - 1];
+                dphi = traj.phi[i + 1] - traj.phi[i - 1];
+            }
 
-        out.ut_fd[i] = ut;
-        out.ur_fd[i] = ur;
-        out.uphi_fd[i] = up;
+            if (std::abs(dtau) < 1e-300) dtau = 1e-300;
 
-        const double r = out.r[i];
-        const double A = 1.0 - 2.0 * M / r;
+            traj.ut_fd[i] = dt / dtau;
+            traj.ur_fd[i] = dr / dtau;
+            traj.uphi_fd[i] = dphi / dtau;
 
-        if (!(A > A_min) || !std::isfinite(A)) {
-            out.norm_u[i] = std::numeric_limits<double>::quiet_NaN();
-            continue;
+            const double rr = traj.r[i];
+            const double A = safe_A(M, rr);
+            // g_tt = -A, g_rr = 1/A, g_phiphi = r^2
+            const double ut = traj.ut_fd[i];
+            const double ur = traj.ur_fd[i];
+            const double up = traj.uphi_fd[i];
+
+            const double g_uu = (-A) * (ut * ut) + (1.0 / A) * (ur * ur) + (rr * rr) * (up * up);
+            traj.norm_u[i] = g_uu + 1.0; // deve ser ~0
         }
-
-        // métrica Schwarzschild (equatorial), assinatura (-,+,+,+):
-        // ds^2 = -A dt^2 + A^{-1} dr^2 + r^2 dphi^2
-        const double g_tt = -A;
-        const double g_rr = 1.0 / A;
-        const double g_pp = r * r;
-
-        const double norm = g_tt*ut*ut + g_rr*ur*ur + g_pp*up*up + 1.0;
-        out.norm_u[i] = norm;
     }
 
-    return out;
+    // Se terminou naturalmente e ninguém setou ERROR/CAPTURE, mantém BOUND
+    // (isso impede o teu bug atual de status ERROR em caso saudável)
+    if (traj.status == OrbitStatus::BOUND) {
+        // ok
+    }
+
+    return traj;
 }
 
 } // namespace relorbit

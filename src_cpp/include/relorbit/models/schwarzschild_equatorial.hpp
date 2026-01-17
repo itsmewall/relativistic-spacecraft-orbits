@@ -1,9 +1,10 @@
+// src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp
 #pragma once
 #include <cmath>
 #include <string>
 #include <vector>
 
-#include "relorbit/types.hpp"  // <<< fonte única: OrbitStatus, SolverCfg, TrajectoryNewton
+#include "relorbit/types.hpp"  // OrbitStatus, SolverCfg, etc.
 
 namespace relorbit {
 
@@ -22,7 +23,7 @@ struct TrajectorySchwarzschildEq {
     // momento radial pr = dr/dtau
     std::vector<double> pr;
 
-    // diagnóstico "por construção" (não usar como validação principal)
+    // diagnóstico "por construção"
     // epsilon(tau) = pr^2 + V_eff(r) - E^2  (deve ser ~0)
     std::vector<double> epsilon;
 
@@ -31,15 +32,23 @@ struct TrajectorySchwarzschildEq {
     std::vector<double> L_series;
 
     // =========================================
-    // NOVO: checagem independente via FD
+    // Checagem independente via FD
     // =========================================
-    // u^t, u^r, u^phi obtidos por derivada numérica de (tcoord,r,phi) em função de tau
-    std::vector<double> ut_fd;
-    std::vector<double> ur_fd;
-    std::vector<double> uphi_fd;
+    std::vector<double> ut_fd;   // dt/dtau via finite-diff
+    std::vector<double> ur_fd;   // dr/dtau via finite-diff
+    std::vector<double> uphi_fd; // dphi/dtau via finite-diff
+    std::vector<double> norm_u;  // g(u,u)+1 (deve ser ~0)
 
-    // norm_u = g_{μν} u^μ u^ν + 1 (timelike). Deve tender a 0 quando dt -> 0.
-    std::vector<double> norm_u;
+    // =========================================
+    // Eventos detectados com localização no passo
+    // =========================================
+    // kind: "horizon", "periapse", "apoapse", "turning_point", "capture"
+    std::vector<std::string> event_kind;
+    std::vector<double> event_tau;
+    std::vector<double> event_tcoord;
+    std::vector<double> event_r;
+    std::vector<double> event_phi;
+    std::vector<double> event_pr;
 
     OrbitStatus status = OrbitStatus::ERROR;
     std::string message;

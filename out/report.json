@@ -66,7 +66,8 @@
       "ok": true,
       "ok_cases": true,
       "ok_convergence": true,
-      "n_cases": 6,
+      "ok_events_convergence": true,
+      "n_cases": 9,
       "results": [
         {
           "name": "schwarzschild_circular_M1_r10_dt1e3",
@@ -85,7 +86,8 @@
           "r_min": 10.0,
           "r_end": 10.0,
           "constraint_abs_max": 0.0,
-          "norm_u_abs_max": 1.2710943408933417e-11,
+          "norm_u_abs_max": 1.4026779737719153e-11,
+          "events": [],
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND"
@@ -109,7 +111,8 @@
           "r_min": 10.0,
           "r_end": 10.0,
           "constraint_abs_max": 0.0,
-          "norm_u_abs_max": 3.909716994598966e-11,
+          "norm_u_abs_max": 3.909694790138474e-11,
+          "events": [],
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND"
@@ -134,6 +137,7 @@
           "r_end": 10.0,
           "constraint_abs_max": 0.0,
           "norm_u_abs_max": 1.4780243695611262e-10,
+          "events": [],
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND"
@@ -141,10 +145,115 @@
           "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
         },
         {
+          "name": "schwarzschild_bound_turning_M1_r12_dt1e3",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.97,
+          "L": 4.0,
+          "pr0": -0.12236859921595049,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.001,
+          "n_steps": 0,
+          "r_min": 7.605640776902452,
+          "r_end": 21.05127281207597,
+          "constraint_abs_max": 1.4432899320127035e-15,
+          "norm_u_abs_max": 5.0398321516098576e-08,
+          "events": [
+            {
+              "kind": "periapse",
+              "tau": 51.7989308024873,
+              "tcoord": 64.52468415915892,
+              "r": 7.605640777043609,
+              "phi": 2.558823587262891,
+              "pr": 0.0,
+              "i": 0
+            }
+          ],
+          "criteria": {
+            "constraint_abs_max": 1e-08,
+            "status": "BOUND"
+          },
+          "_sig": "{\"E\":0.97,\"L\":4.0,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.12236859921595049,\"span\":[0.0,200.0],\"state0\":[12.0,0.0]}"
+        },
+        {
+          "name": "schwarzschild_bound_turning_M1_r12_dt5e4",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.97,
+          "L": 4.0,
+          "pr0": -0.12236859921595049,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.0005,
+          "n_steps": 0,
+          "r_min": 7.605640776902474,
+          "r_end": 21.051272812108607,
+          "constraint_abs_max": 1.5543122344752192e-15,
+          "norm_u_abs_max": 2.523259312603443e-08,
+          "events": [
+            {
+              "kind": "periapse",
+              "tau": 51.79893080258332,
+              "tcoord": 64.52468415915914,
+              "r": 7.6056407769617165,
+              "phi": 2.558823587262954,
+              "pr": 0.0,
+              "i": 0
+            }
+          ],
+          "criteria": {
+            "constraint_abs_max": 1e-08,
+            "status": "BOUND"
+          },
+          "_sig": "{\"E\":0.97,\"L\":4.0,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.12236859921595049,\"span\":[0.0,200.0],\"state0\":[12.0,0.0]}"
+        },
+        {
+          "name": "schwarzschild_bound_turning_M1_r12_dt2p5e4",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.97,
+          "L": 4.0,
+          "pr0": -0.12236859921595049,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.00025,
+          "n_steps": 0,
+          "r_min": 7.605640776902497,
+          "r_end": 21.051272812109968,
+          "constraint_abs_max": 2.6645352591003757e-15,
+          "norm_u_abs_max": 1.2556331530078069e-08,
+          "events": [
+            {
+              "kind": "periapse",
+              "tau": 51.798930802674285,
+              "tcoord": 64.52468415915997,
+              "r": 7.605640776920781,
+              "phi": 2.558823587262938,
+              "pr": 0.0,
+              "i": 0
+            }
+          ],
+          "criteria": {
+            "constraint_abs_max": 1e-08,
+            "status": "BOUND"
+          },
+          "_sig": "{\"E\":0.97,\"L\":4.0,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.12236859921595049,\"span\":[0.0,200.0],\"state0\":[12.0,0.0]}"
+        },
+        {
           "name": "schwarzschild_plunge_M1_r5p8_dt5e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
-          "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.49979, r_cap=2.5, capture_r=2.5, M=1)",
+          "message": "capture: r crossed capture radius (r_prev=2.500065e+00, r_now=2.499788e+00, r_cap=2.500000e+00, capture_r=2.500000e+00, M=1.000000e+00)",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -154,10 +263,21 @@
           "tauf": 200.0,
           "dt": 0.0005,
           "n_steps": 0,
-          "r_min": 2.499788327213434,
-          "r_end": 2.499788327213434,
-          "constraint_abs_max": 4.440892098500626e-15,
-          "norm_u_abs_max": 0.0011079743648583218,
+          "r_min": 2.5,
+          "r_end": 2.5,
+          "constraint_abs_max": 4.902792061223238e-09,
+          "norm_u_abs_max": 0.0006868893034870371,
+          "events": [
+            {
+              "kind": "capture",
+              "tau": 56.41911681622785,
+              "tcoord": 93.18145841040804,
+              "r": 2.5,
+              "phi": 8.641909615605792,
+              "pr": -0.5523634886757126,
+              "i": 0
+            }
+          ],
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "CAPTURE"
@@ -168,7 +288,7 @@
           "name": "schwarzschild_plunge_M1_r5p8_dt2p5e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
-          "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.49993, r_cap=2.5, capture_r=2.5, M=1)",
+          "message": "capture: r crossed capture radius (r_prev=2.500065e+00, r_now=2.499926e+00, r_cap=2.500000e+00, capture_r=2.500000e+00, M=1.000000e+00)",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -178,10 +298,21 @@
           "tauf": 200.0,
           "dt": 0.00025,
           "n_steps": 0,
-          "r_min": 2.4999264383438735,
-          "r_end": 2.4999264383438735,
-          "constraint_abs_max": 1.1213252548714081e-14,
-          "norm_u_abs_max": 0.0005537384061351514,
+          "r_min": 2.5,
+          "r_end": 2.5,
+          "constraint_abs_max": 1.7037374844264264e-09,
+          "norm_u_abs_max": 0.0002007551296427934,
+          "events": [
+            {
+              "kind": "capture",
+              "tau": 56.41911682462164,
+              "tcoord": 93.18145838866059,
+              "r": 2.5,
+              "phi": 8.64190961662859,
+              "pr": -0.5523634857799251,
+              "i": 0
+            }
+          ],
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "CAPTURE"
@@ -192,7 +323,7 @@
           "name": "schwarzschild_plunge_M1_r5p8_dt1p25e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
-          "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.5, r_cap=2.5, capture_r=2.5, M=1)",
+          "message": "capture: r crossed capture radius (r_prev=2.500065e+00, r_now=2.499995e+00, r_cap=2.500000e+00, capture_r=2.500000e+00, M=1.000000e+00)",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -202,10 +333,21 @@
           "tauf": 200.0,
           "dt": 0.000125,
           "n_steps": 0,
-          "r_min": 2.4999954865513776,
-          "r_end": 2.4999954865513776,
-          "constraint_abs_max": 6.772360450213455e-15,
-          "norm_u_abs_max": 0.00027680691350573383,
+          "r_min": 2.5,
+          "r_end": 2.5,
+          "constraint_abs_max": 1.045369346641678e-10,
+          "norm_u_abs_max": 0.00024061453003865196,
+          "events": [
+            {
+              "kind": "capture",
+              "tau": 56.419116828120906,
+              "tcoord": 93.18145837778982,
+              "r": 2.5,
+              "phi": 8.641909617139722,
+              "pr": -0.5523634843323271,
+              "i": 0
+            }
+          ],
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "CAPTURE"
@@ -228,9 +370,31 @@
             0.00025
           ],
           "norm_u_abs_max": [
-            1.2710943408933417e-11,
-            3.909716994598966e-11,
+            1.4026779737719153e-11,
+            3.909694790138474e-11,
             1.4780243695611262e-10
+          ],
+          "violations": [],
+          "abs_tol": 1e-09,
+          "rel_tol": 0.25
+        },
+        {
+          "passed": true,
+          "inconclusive": false,
+          "cases": [
+            "schwarzschild_bound_turning_M1_r12_dt1e3",
+            "schwarzschild_bound_turning_M1_r12_dt5e4",
+            "schwarzschild_bound_turning_M1_r12_dt2p5e4"
+          ],
+          "dts": [
+            0.001,
+            0.0005,
+            0.00025
+          ],
+          "norm_u_abs_max": [
+            5.0398321516098576e-08,
+            2.523259312603443e-08,
+            1.2556331530078069e-08
           ],
           "violations": [],
           "abs_tol": 1e-09,
@@ -250,13 +414,73 @@
             0.000125
           ],
           "norm_u_abs_max": [
-            0.0011079743648583218,
-            0.0005537384061351514,
-            0.00027680691350573383
+            0.0006868893034870371,
+            0.0002007551296427934,
+            0.00024061453003865196
           ],
           "violations": [],
           "abs_tol": 1e-09,
           "rel_tol": 0.25
+        }
+      ],
+      "events_convergence": [
+        {
+          "passed": true,
+          "skipped": true,
+          "inconclusive": false,
+          "reason": "no events detected in any run for this group (N/A)",
+          "cases": [
+            "schwarzschild_circular_M1_r10_dt1e3",
+            "schwarzschild_circular_M1_r10_dt5e4",
+            "schwarzschild_circular_M1_r10_dt2p5e4"
+          ],
+          "dts": [
+            0.001,
+            0.0005,
+            0.00025
+          ],
+          "violations": [],
+          "mismatches": [],
+          "abs_tol_factor": 2.0,
+          "rel_tol": 0.0
+        },
+        {
+          "passed": true,
+          "skipped": false,
+          "inconclusive": false,
+          "cases": [
+            "schwarzschild_bound_turning_M1_r12_dt1e3",
+            "schwarzschild_bound_turning_M1_r12_dt5e4",
+            "schwarzschild_bound_turning_M1_r12_dt2p5e4"
+          ],
+          "dts": [
+            0.001,
+            0.0005,
+            0.00025
+          ],
+          "abs_tol_factor": 2.0,
+          "rel_tol": 0.0,
+          "violations": [],
+          "mismatches": []
+        },
+        {
+          "passed": true,
+          "skipped": false,
+          "inconclusive": false,
+          "cases": [
+            "schwarzschild_plunge_M1_r5p8_dt5e4",
+            "schwarzschild_plunge_M1_r5p8_dt2p5e4",
+            "schwarzschild_plunge_M1_r5p8_dt1p25e4"
+          ],
+          "dts": [
+            0.0005,
+            0.00025,
+            0.000125
+          ],
+          "abs_tol_factor": 2.0,
+          "rel_tol": 0.0,
+          "violations": [],
+          "mismatches": []
         }
       ]
     }

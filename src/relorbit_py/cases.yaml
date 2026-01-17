@@ -101,6 +101,64 @@ suites:
           r_max_dev: 1.0e-3
 
       # ---------------------------
+      # Bound w/ turning points (3 dts) — mesmo físico, dt diferente
+      # Esperado: pr muda de sinal => turning points (peri/apo) aparecem no report
+      # ---------------------------
+      - name: schwarzschild_bound_turning_M1_r12_dt1e3
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.97
+          L: 4.0
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        pr0: -0.12236859921595049   # consistente: pr0^2 = E^2 - Veff(r0)
+        state0: [12.0, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 1.0e-3
+        criteria:
+          status: BOUND
+          constraint_abs_max: 1.0e-8
+          r_max_dev: null
+
+      - name: schwarzschild_bound_turning_M1_r12_dt5e4
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.97
+          L: 4.0
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        pr0: -0.12236859921595049
+        state0: [12.0, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 5.0e-4
+        criteria:
+          status: BOUND
+          constraint_abs_max: 1.0e-8
+          r_max_dev: null
+
+      - name: schwarzschild_bound_turning_M1_r12_dt2p5e4
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.97
+          L: 4.0
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        pr0: -0.12236859921595049
+        state0: [12.0, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 2.5e-4
+        criteria:
+          status: BOUND
+          constraint_abs_max: 1.0e-8
+          r_max_dev: null
+
+      # ---------------------------
       # Plunge/Capture (3 dts) — mesmo físico, dt diferente
       # ---------------------------
       - name: schwarzschild_plunge_M1_r5p8_dt5e4
