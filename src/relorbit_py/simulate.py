@@ -1,4 +1,3 @@
-# src/relorbit_py/simulate.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -56,49 +55,24 @@ def _make_solver_cfg(case: Dict[str, Any]) -> Any:
     return cfg
 
 
-def _parse_pr0(case: Dict[str, Any]) -> float:
-    """
-    Regras:
-      - Se existir case["pr0"] -> usa.
-      - Senão, se existir case["params"]["pr0"] -> usa.
-      - Senão, se existir radial_dir -> aplica sinal em um "pr0_mag" se existir, senão 0.0.
-      - Se nada existir -> 0.0 (default legado).
-    """
-    params = case.get("params", {}) or {}
+def _pick_pr0(case: Dict[str, Any], params: Dict[str, Any]) -> float:
+    # prioridade: case.pr0 > params.pr0 > radial_dir > 0.0
+    if "pr0" in case:
+        return float(case["pr0"])
+    if "pr0" in params:
+        return float(params["pr0"])
 
-    pr0_raw = case.get("pr0", None)
-    if pr0_raw is None:
-        pr0_raw = params.get("pr0", None)
-
-    if pr0_raw is not None:
-        return float(pr0_raw)
-
-    radial_dir = case.get("radial_dir", None)
-    if radial_dir is None:
-        radial_dir = params.get("radial_dir", None)
-
-    pr0_mag_raw = case.get("pr0_mag", None)
-    if pr0_mag_raw is None:
-        pr0_mag_raw = params.get("pr0_mag", None)
-
-    pr0_mag = float(pr0_mag_raw) if pr0_mag_raw is not None else 0.0
-
+    radial_dir = case.get("radial_dir", params.get("radial_dir", None))
     if radial_dir is None:
         return 0.0
 
-    rd = radial_dir
-    if isinstance(rd, (int, float)):
-        return -abs(pr0_mag) if float(rd) < 0 else abs(pr0_mag)
+    rd = str(radial_dir).strip().lower()
+    if rd in ("in", "inbound", "fall", "plunge", "-1", "neg", "negative"):
+        return -0.02
+    if rd in ("out", "outbound", "+1", "pos", "positive"):
+        return +0.02
 
-    if isinstance(rd, str):
-        s = rd.strip().lower()
-        if s in ("in", "inbound", "inward", "plunge", "capture", "neg", "negative", "-"):
-            return -abs(pr0_mag)
-        if s in ("out", "outbound", "outward", "pos", "positive", "+"):
-            return abs(pr0_mag)
-
-    # Não reconhecido -> default legado
-    return 0.0
+    raise ValueError(f"radial_dir inválido no caso '{case.get('name','<sem-nome>')}': {radial_dir}")
 
 
 def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
@@ -111,7 +85,7 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
     if model == "newton":
         params = case.get("params", {}) or {}
         mu = float(params.get("mu", case.get("mu", 1.0)))
-        state0 = case["state0"]  # [x,y,vx,vy]
+        state0 = case["state0"]
         t0, tf = a0, af
         return eng.simulate_newton_rk4(mu, state0, t0, tf, cfg)
 
@@ -138,16 +112,33 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
         r0 = float(state0[0])
         phi0 = float(state0[1])
 
-        pr0 = _parse_pr0(case)
-
+        pr0 = _pick_pr0(case, params)
         tau0, tauf = a0, af
 
-        capture_r = float(params.get("capture_r", 2.0))
-        capture_eps = float(params.get("capture_eps", 1e-12))
+        # Lê do YAML (preferência: params)
+        capture_r = float(params.get("capture_r", case.get("capture_r", 2.0)))
+        capture_eps = float(params.get("capture_eps", case.get("capture_eps", 1e-12)))
 
-        # Nova assinatura: ... r0, phi0, pr0, tau0, tauf, cfg, ...
+        # DEBUG IMPLACÁVEL (remova quando estabilizar)
+        # Isso garante que você está rodando ESTE simulate.py e que o YAML foi lido como você pensa.
+        print(
+            f"[simulate.py] case={case.get('name')} capture_r={capture_r} capture_eps={capture_eps} pr0={pr0} "
+            f"(simulate.py file={__file__})"
+        )
+
+        # CHAMADA POR KEYWORD: impossível errar ordem / cair em default sem querer
         return eng.simulate_schwarzschild_equatorial_rk4(
-            M, E, L, r0, phi0, pr0, tau0, tauf, cfg, capture_r, capture_eps
+            M=M,
+            E=E,
+            L=L,
+            r0=r0,
+            phi0=phi0,
+            pr0=pr0,
+            tau0=tau0,
+            tauf=tauf,
+            cfg=cfg,
+            capture_r=capture_r,
+            capture_eps=capture_eps,
         )
 
     raise ValueError(f"Modelo desconhecido no caso '{case.get('name','<sem-nome>')}': {model}")

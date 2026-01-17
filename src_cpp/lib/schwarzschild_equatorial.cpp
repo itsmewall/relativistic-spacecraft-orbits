@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <algorithm>
+#include <sstream>
 
 namespace relorbit {
 
@@ -13,18 +14,17 @@ struct SchwState {
 };
 
 static inline SchwState f_schw(double M, double E, double L, const SchwState& s) {
-    const double A = 1.0 - 2.0 * M / s.r;   // 1 - 2M/r
+    const double A = 1.0 - 2.0 * M / s.r; // 1 - 2M/r
 
     SchwState ds;
-    ds.tcoord = E / A;                      // dt/dtau
-    ds.r      = s.pr;                       // dr/dtau
-    ds.phi    = L / (s.r * s.r);            // dphi/dtau
+    ds.tcoord = E / A;                         // dt/dtau
+    ds.r      = s.pr;                          // dr/dtau
+    ds.phi    = L / (s.r * s.r);               // dphi/dtau
     ds.pr     = -0.5 * dVeff_dr_schw(M, s.r, L); // dpr/dtau
     return ds;
 }
 
 static inline double fd_first(const std::vector<double>& x, const std::vector<double>& t, size_t i) {
-    // derivada dx/dt com malha uniforme ou não-uniforme (usa diferenças)
     const size_t n = x.size();
     if (n < 2) return 0.0;
 
@@ -58,6 +58,8 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     if (M <= 0) throw std::runtime_error("M must be > 0");
     if (r0 <= 2.0 * M) throw std::runtime_error("r0 must be > 2M");
     if (tauf <= tau0) throw std::runtime_error("tauf must be > tau0");
+    if (!(capture_r > 0.0)) throw std::runtime_error("capture_r must be > 0");
+    if (!(capture_eps >= 0.0)) throw std::runtime_error("capture_eps must be >= 0");
 
     int n = cfg.n_steps;
     if (n <= 0) {
@@ -66,12 +68,14 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         if (n < 1) n = 1;
     }
     const double dt = (tauf - tau0) / static_cast<double>(n);
+
+    // Coerencia fisica basica: E^2 - Veff(r0) deve ser >= 0 (radial real)
     const double V0 = Veff_schw(M, r0, L);
     const double tol_ic = 1e-12;
     if ((E * E - V0) < -tol_ic) {
         throw std::runtime_error("condicoes iniciais impossiveis: E^2 < Veff(r0) (sem pr real)");
     }
-    
+
     TrajectorySchwarzschildEq out;
     out.M = M; out.E = E; out.L = L; out.r0 = r0; out.phi0 = phi0;
 
@@ -88,14 +92,12 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     s.tcoord = 0.0;
     s.r = r0;
     s.phi = phi0;
-
-    // pr0: se você quiser inbound/outbound, isso vira parâmetro (vamos fazer depois).
-    // Por ora, default = turning point
     s.pr = pr0;
 
     double tau = tau0;
 
     out.status = OrbitStatus::BOUND;
+    out.message.clear();
 
     auto push = [&]() {
         out.tau.push_back(tau);
@@ -111,22 +113,43 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         out.L_series.push_back(L);
     };
 
+    // Raio de captura efetivo (em coordenada r)
+    const double r_cap = capture_r * M;
+
     push();
 
-    const double r_capture = capture_r * M;
+    // Se já começou dentro do raio de captura (caso raro, mas define comportamento)
+    if (s.r <= r_cap + capture_eps) {
+        out.status = OrbitStatus::CAPTURE;
+        std::ostringstream oss;
+        oss << "capture: started inside capture radius (r_cap=" << r_cap
+            << ", capture_r=" << capture_r << ", M=" << M << ")";
+        out.message = oss.str();
+        // ainda fazemos pós-processamento FD com N=1 (vai dar 0.0), ok.
+        // return out;  // opcional: pode retornar direto
+    }
 
     for (int i = 0; i < n; ++i) {
         const double r_prev = s.r;
 
         const auto k1 = f_schw(M, E, L, s);
 
-        SchwState s2 { s.tcoord + 0.5*dt*k1.tcoord, s.r + 0.5*dt*k1.r, s.phi + 0.5*dt*k1.phi, s.pr + 0.5*dt*k1.pr };
+        SchwState s2 { s.tcoord + 0.5*dt*k1.tcoord,
+                       s.r      + 0.5*dt*k1.r,
+                       s.phi    + 0.5*dt*k1.phi,
+                       s.pr     + 0.5*dt*k1.pr };
         const auto k2 = f_schw(M, E, L, s2);
 
-        SchwState s3 { s.tcoord + 0.5*dt*k2.tcoord, s.r + 0.5*dt*k2.r, s.phi + 0.5*dt*k2.phi, s.pr + 0.5*dt*k2.pr };
+        SchwState s3 { s.tcoord + 0.5*dt*k2.tcoord,
+                       s.r      + 0.5*dt*k2.r,
+                       s.phi    + 0.5*dt*k2.phi,
+                       s.pr     + 0.5*dt*k2.pr };
         const auto k3 = f_schw(M, E, L, s3);
 
-        SchwState s4 { s.tcoord + dt*k3.tcoord, s.r + dt*k3.r, s.phi + dt*k3.phi, s.pr + dt*k3.pr };
+        SchwState s4 { s.tcoord + dt*k3.tcoord,
+                       s.r      + dt*k3.r,
+                       s.phi    + dt*k3.phi,
+                       s.pr     + dt*k3.pr };
         const auto k4 = f_schw(M, E, L, s4);
 
         s.tcoord += (dt/6.0) * (k1.tcoord + 2.0*k2.tcoord + 2.0*k3.tcoord + k4.tcoord);
@@ -143,9 +166,16 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             break;
         }
 
-        if (s.r <= r_capture + capture_eps) {
+        // CAPTURE por cruzamento (event detection simples)
+        if (r_prev > r_cap && s.r <= r_cap + capture_eps) {
             out.status = OrbitStatus::CAPTURE;
-            out.message = "capture: r crossed capture radius";
+            std::ostringstream oss;
+            oss << "capture: r crossed capture radius (r_prev=" << r_prev
+                << ", r_now=" << s.r
+                << ", r_cap=" << r_cap
+                << ", capture_r=" << capture_r
+                << ", M=" << M << ")";
+            out.message = oss.str();
             break;
         }
 
@@ -153,12 +183,6 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             out.status = OrbitStatus::UNBOUND;
             out.message = "unbound: r grew too large";
             break;
-        }
-
-        if (r_prev > r_capture && s.r <= r_capture + capture_eps) {
-            out.status = OrbitStatus::CAPTURE;
-            out.message = "capture: r crossed capture radius";
-            break;  
         }
     }
 
@@ -171,6 +195,10 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     out.uphi_fd.resize(N);
     out.norm_u.resize(N);
 
+    // Quando A fica muito pequeno, 1/A explode e norm_u FD vira lixo numérico.
+    // Então, para A <= A_min, marcamos norm_u como NaN (o Python usa np.nanmax).
+    const double A_min = 1e-6;
+
     for (size_t i = 0; i < N; ++i) {
         const double ut = fd_first(out.tcoord, out.tau, i);
         const double ur = fd_first(out.r, out.tau, i);
@@ -182,6 +210,11 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
 
         const double r = out.r[i];
         const double A = 1.0 - 2.0 * M / r;
+
+        if (!(A > A_min) || !std::isfinite(A)) {
+            out.norm_u[i] = std::numeric_limits<double>::quiet_NaN();
+            continue;
+        }
 
         // métrica Schwarzschild (equatorial), assinatura (-,+,+,+):
         // ds^2 = -A dt^2 + A^{-1} dr^2 + r^2 dphi^2

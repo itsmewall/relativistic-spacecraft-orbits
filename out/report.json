@@ -79,6 +79,8 @@
           "tauf": 200.0,
           "dt": 0.001,
           "n_steps": 0,
+          "r_min": 10.0,
+          "r_end": 10.0,
           "constraint_abs_max": 0.0,
           "norm_u_abs_max": 1.2710943408933417e-11,
           "criteria": {
@@ -89,8 +91,8 @@
         {
           "name": "schwarzschild_plunge_M1_r5p8",
           "passed": false,
-          "status": "OrbitStatus.BOUND",
-          "message": "",
+          "status": "OrbitStatus.CAPTURE",
+          "message": "capture: r crossed capture radius (r_prev=2.50006, r_now=2.49979, r_cap=2.5, capture_r=2.5, M=1)",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9429541672723838,
@@ -99,8 +101,10 @@
           "tauf": 200.0,
           "dt": 0.0005,
           "n_steps": 0,
-          "constraint_abs_max": 1.1102230246251565e-16,
-          "norm_u_abs_max": 7.576628213712411e-11,
+          "r_min": 2.499788327213434,
+          "r_end": 2.499788327213434,
+          "constraint_abs_max": 0.00040000000000095515,
+          "norm_u_abs_max": 0.003107767793209426,
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "CAPTURE"

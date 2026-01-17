@@ -42,7 +42,7 @@ suites:
           h_rel_drift_max: 2.0e-8
 
   schwarzschild:
-    description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0)."
+    description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0,pr0)."
     cases:
       - name: schwarzschild_circular_M1_r10
         model: schwarzschild
@@ -50,19 +50,16 @@ suites:
           M: 1.0
           E: 0.9561828874675149
           L: 3.779644730092272
-          # opcional, defaults do C++
-          capture_r: 2.0
+          capture_r: 2.5
           capture_eps: 1.0e-12
         # [r0, phi0]
         state0: [10.0, 0.0]
-        # [tau0, tauf]
         span: [0.0, 200.0]
         solver:
           dt: 1.0e-3
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-10
-          # circular: r deve permanecer ~constante
           r_max_dev: 1.0e-3
 
       - name: schwarzschild_plunge_M1_r5p8
@@ -71,8 +68,10 @@ suites:
           M: 1.0
           E: 0.9429541672723838
           L: 3.466162967069742
-          capture_r: 2.0
+          capture_r: 2.5
           capture_eps: 1.0e-12
+        # pr0 < 0 => inbound (plunge/capture)
+        pr0: -0.02
         state0: [5.8, 0.0]
         span: [0.0, 200.0]
         solver:

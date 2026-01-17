@@ -1,4 +1,3 @@
-# src/relorbit_py/validate.py
 from __future__ import annotations
 
 import argparse
@@ -34,14 +33,17 @@ def _unwrap_traj(res: Any) -> Any:
     if res is None:
         raise TypeError("simulate_case retornou None (bug).")
 
+    # Newton
     if hasattr(res, "t") and hasattr(res, "y"):
         return res
+
+    # Schwarzschild eq
     if hasattr(res, "tau") and hasattr(res, "r") and hasattr(res, "phi"):
         return res
 
+    # wrappers comuns
     if isinstance(res, dict) and "traj" in res:
         return res["traj"]
-
     if hasattr(res, "data") and isinstance(getattr(res, "data"), dict) and "traj" in res.data:
         return res.data["traj"]
 
@@ -116,8 +118,9 @@ def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
 
 def _compute_norm_u_fallback(traj: Any) -> np.ndarray:
     """
-    Fallback: calcula norm_u = g(u,u)+1 (deve tender a 0) usando campos do traj.
-    Requer: M, E, L, tau, r, pr.
+    Fallback: norm_u = g(u,u)+1 (deve tender a 0).
+    Usa: M, E, L, r, pr; e calcula ut via E/A.
+    ATENCAO: perto do horizonte (A->0) isso pode explodir numericamente.
     """
     tau = np.array(traj.tau, dtype=float)
     r = np.array(traj.r, dtype=float)
@@ -195,11 +198,8 @@ def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_constraint_log.png"))
 
-    # norm_u: regra dura
-    # - se traj.norm_u existe, tamanho TEM que bater com tau; senão: erro claro e NÃO PLOTA
-    # - se não existe, calcula fallback e plota.
+    # norm_u: plota apenas se tiver shape certo; senao, erro claro.
     norm_u: Optional[np.ndarray] = None
-
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
         if nu.size != tau.size:
@@ -272,11 +272,15 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     traj = _unwrap_traj(simulate_case(case, "schwarzschild"))
 
     tau = np.array(traj.tau, dtype=float)
+    r_arr = np.array(traj.r, dtype=float)
+
+    r_min = float(np.min(r_arr)) if r_arr.size > 0 else float("nan")
+    r_end = float(r_arr[-1]) if r_arr.size > 0 else float("nan")
 
     eps = np.array(traj.epsilon, dtype=float)
     eps_max = float(np.max(np.abs(eps)))
 
-    # norm_u_abs_max: regra dura se engine fornecer norm_u com shape errado
+    # norm_u_abs_max: se engine fornecer norm_u, exige shape correto; senao, fallback.
     norm_u_abs_max: Optional[float] = None
     if hasattr(traj, "norm_u"):
         nu = np.array(traj.norm_u, dtype=float)
@@ -288,7 +292,6 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         if nu.size > 0:
             norm_u_abs_max = float(np.nanmax(np.abs(nu)))
     else:
-        # fallback consistente (e garante que norm_u_abs_max exista)
         nu_fb = _compute_norm_u_fallback(traj)
         if nu_fb.size > 0:
             norm_u_abs_max = float(np.nanmax(np.abs(nu_fb)))
@@ -297,8 +300,9 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     eps_max_allowed = float(crit.get("constraint_abs_max", 1e-10))
     expected_status = str(crit.get("status", "BOUND"))
     status_str = str(getattr(traj, "status", ""))
-    status_ok = status_str.endswith(expected_status)
+    msg_str = str(getattr(traj, "message", ""))
 
+    status_ok = status_str.endswith(expected_status)
     passed = (eps_max <= eps_max_allowed) and status_ok
 
     dt, n_steps = _get_solver_dt_nsteps(case)
@@ -315,7 +319,7 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "name": case["name"],
         "passed": bool(passed),
         "status": status_str,
-        "message": getattr(traj, "message", ""),
+        "message": msg_str,
         "model": "schwarzschild",
         "M": M,
         "E": Epar,
@@ -324,6 +328,8 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "tauf": tauf,
         "dt": dt,
         "n_steps": int(n_steps),
+        "r_min": r_min,
+        "r_end": r_end,
         "constraint_abs_max": float(eps_max),
         "norm_u_abs_max": norm_u_abs_max,
         "criteria": {
@@ -350,6 +356,9 @@ def main() -> None:
 
     report: Dict[str, Any] = {"suites": []}
 
+    # -------------------------
+    # Newton
+    # -------------------------
     newton_cases = cfg["suites"]["newton"]["cases"]
     newton_results: List[Dict[str, Any]] = []
     ok_newton = True
@@ -363,8 +372,13 @@ def main() -> None:
         tag = "PASS" if r["passed"] else "FAIL"
         print(f"[{tag}] {r['name']} | dt={r['dt']:.1e} | dE={r['energy_rel_drift']:.3e} | dh={r['h_rel_drift']:.3e}")
 
-    report["suites"].append({"suite": "newton", "ok": ok_newton, "n_cases": len(newton_cases), "results": newton_results})
+    report["suites"].append(
+        {"suite": "newton", "ok": ok_newton, "n_cases": len(newton_cases), "results": newton_results}
+    )
 
+    # -------------------------
+    # Schwarzschild
+    # -------------------------
     schw_cases = cfg["suites"]["schwarzschild"]["cases"]
     schw_results: List[Dict[str, Any]] = []
     ok_schw = True
@@ -378,9 +392,17 @@ def main() -> None:
         tag = "PASS" if r["passed"] else "FAIL"
         nu = r.get("norm_u_abs_max", None)
         nu_s = "None" if nu is None else f"{nu:.3e}"
-        print(f"[{tag}] {r['name']} | dt={r['dt']:.1e} | eps_max={r['constraint_abs_max']:.3e} | norm_u_max={nu_s} | status={r['status']}")
+        rmin = r.get("r_min", float("nan"))
+        rend = r.get("r_end", float("nan"))
+        msg = r.get("message", "")
+        print(
+            f"[{tag}] {r['name']} | dt={r['dt']:.1e} | r_min={rmin:.6f} | r_end={rend:.6f} | "
+            f"eps_max={r['constraint_abs_max']:.3e} | norm_u_max={nu_s} | status={r['status']} | msg={msg}"
+        )
 
-    report["suites"].append({"suite": "schwarzschild", "ok": ok_schw, "n_cases": len(schw_cases), "results": schw_results})
+    report["suites"].append(
+        {"suite": "schwarzschild", "ok": ok_schw, "n_cases": len(schw_cases), "results": schw_results}
+    )
 
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "report.json"), "w", encoding="utf-8") as f:
