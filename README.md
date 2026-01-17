@@ -1,4 +1,3 @@
-````md
 # relorbit — Schwarzschild (Plano Equatorial) + Validação
 
 Este repositório implementa e valida um motor numérico (C++ com bindings em Python via `pybind11`) para simulação de órbitas no problema de dois corpos (Newtoniano plano) e, nesta etapa, geodésicas no espaço-tempo de Schwarzschild restritas ao plano equatorial.
@@ -169,5 +168,3 @@ Para Schwarzschild:
 * Misner, Thorne & Wheeler — *Gravitation* (geodésicas, Schwarzschild, integrais de movimento).
 * Schutz — *A First Course in General Relativity* (introdução prática e geodésicas).
 * Chandrasekhar — *The Mathematical Theory of Black Holes* (tratamento clássico e profundo).
-
-```
