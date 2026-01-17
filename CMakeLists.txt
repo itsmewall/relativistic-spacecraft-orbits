@@ -25,10 +25,8 @@ pybind11_add_module(_engine
 )
 
 # Seus headers
-target_include_directories(_engine PRIVATE
-  ${Python_INCLUDE_DIRS}
-  src_cpp/include
-)
+target_include_directories(_engine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src_cpp/include)
+
 
 # Flags recomendadas
 if (MSVC)

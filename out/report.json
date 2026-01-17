@@ -1,0 +1,114 @@
+{
+  "suites": [
+    {
+      "suite": "newton",
+      "ok": true,
+      "n_cases": 3,
+      "results": [
+        {
+          "name": "newton_circular_mu1_r1",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "newton",
+          "mu": 1.0,
+          "t0": 0.0,
+          "tf": 100.0,
+          "dt": 0.001,
+          "n_steps": 0,
+          "energy_rel_drift": 2.3092638912203256e-14,
+          "h_rel_drift": 1.1546319456101628e-14,
+          "criteria": {
+            "energy_rel_drift_max": 1e-06,
+            "h_rel_drift_max": 1e-08
+          }
+        },
+        {
+          "name": "newton_elliptic_mu1_r1_v0p8",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "newton",
+          "mu": 1.0,
+          "t0": 0.0,
+          "tf": 200.0,
+          "dt": 0.0005,
+          "n_steps": 0,
+          "energy_rel_drift": 1.2310414125990708e-13,
+          "h_rel_drift": 2.0539125955565396e-14,
+          "criteria": {
+            "energy_rel_drift_max": 2e-06,
+            "h_rel_drift_max": 2e-08
+          }
+        },
+        {
+          "name": "newton_hyperbolic_mu1_r1_v1p6",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "newton",
+          "mu": 1.0,
+          "t0": 0.0,
+          "tf": 20.0,
+          "dt": 0.0001,
+          "n_steps": 0,
+          "energy_rel_drift": 7.731910350068047e-14,
+          "h_rel_drift": 1.584843367652411e-13,
+          "criteria": {
+            "energy_rel_drift_max": 2e-06,
+            "h_rel_drift_max": 2e-08
+          }
+        }
+      ]
+    },
+    {
+      "suite": "schwarzschild",
+      "ok": false,
+      "n_cases": 2,
+      "results": [
+        {
+          "name": "schwarzschild_circular_M1_r10",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.9561828874675149,
+          "L": 3.779644730092272,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.001,
+          "n_steps": 0,
+          "constraint_abs_max": 0.0,
+          "r_max_dev": 0.0,
+          "criteria": {
+            "constraint_abs_max": 1e-10,
+            "r_max_dev": 0.001,
+            "status": "BOUND"
+          }
+        },
+        {
+          "name": "schwarzschild_plunge_M1_r5p8",
+          "passed": false,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "schwarzschild",
+          "M": 1.0,
+          "E": 0.9429541672723838,
+          "L": 3.466162967069742,
+          "tau0": 0.0,
+          "tauf": 200.0,
+          "dt": 0.0005,
+          "n_steps": 0,
+          "constraint_abs_max": 1.1102230246251565e-16,
+          "r_max_dev": null,
+          "criteria": {
+            "constraint_abs_max": 1e-08,
+            "r_max_dev": null,
+            "status": "CAPTURE"
+          }
+        }
+      ]
+    }
+  ]
+}

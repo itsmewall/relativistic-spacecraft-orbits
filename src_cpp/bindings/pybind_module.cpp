@@ -1,15 +1,14 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <array>
 #include <string>
 #include <vector>
 
-#include "relorbit/api.hpp"
+#include "relorbit/models/schwarzschild_equatorial.hpp"
 
 namespace py = pybind11;
 
-// Mantém o toy antigo (útil como sanity)
+// toy antigo (sanity)
 static std::vector<double> rk4_decay(double y0, double k, double t0, double tf, int n_steps) {
     if (n_steps <= 0) throw std::runtime_error("n_steps must be > 0");
     double dt = (tf - t0) / static_cast<double>(n_steps);
@@ -71,4 +70,34 @@ PYBIND11_MODULE(_engine, m) {
           py::arg("tf"),
           py::arg("cfg"),
           "Simulate Newtonian 2-body planar orbit with RK4 fixed-step.");
+
+    py::class_<relorbit::TrajectorySchwarzschildEq>(m, "TrajectorySchwarzschildEq")
+        .def_readonly("tau", &relorbit::TrajectorySchwarzschildEq::tau)
+        .def_readonly("r", &relorbit::TrajectorySchwarzschildEq::r)
+        .def_readonly("phi", &relorbit::TrajectorySchwarzschildEq::phi)
+        .def_readonly("tcoord", &relorbit::TrajectorySchwarzschildEq::tcoord)
+        .def_readonly("pr", &relorbit::TrajectorySchwarzschildEq::pr)
+        .def_readonly("epsilon", &relorbit::TrajectorySchwarzschildEq::epsilon)
+        .def_readonly("E_series", &relorbit::TrajectorySchwarzschildEq::E_series)
+        .def_readonly("L_series", &relorbit::TrajectorySchwarzschildEq::L_series)
+        .def_readonly("status", &relorbit::TrajectorySchwarzschildEq::status)
+        .def_readonly("message", &relorbit::TrajectorySchwarzschildEq::message)
+        .def_readonly("M", &relorbit::TrajectorySchwarzschildEq::M)
+        .def_readonly("E", &relorbit::TrajectorySchwarzschildEq::E)
+        .def_readonly("L", &relorbit::TrajectorySchwarzschildEq::L)
+        .def_readonly("r0", &relorbit::TrajectorySchwarzschildEq::r0)
+        .def_readonly("phi0", &relorbit::TrajectorySchwarzschildEq::phi0);
+
+    m.def("simulate_schwarzschild_equatorial_rk4", &relorbit::simulate_schwarzschild_equatorial_rk4,
+          py::arg("M"),
+          py::arg("E"),
+          py::arg("L"),
+          py::arg("r0"),
+          py::arg("phi0"),
+          py::arg("tau0"),
+          py::arg("tauf"),
+          py::arg("cfg"),
+          py::arg("capture_r") = 2.0,
+          py::arg("capture_eps") = 1e-12,
+          "Simulate Schwarzschild equatorial timelike geodesic with RK4 in proper time tau.");
 }

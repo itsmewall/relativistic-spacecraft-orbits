@@ -1,0 +1,83 @@
+suites:
+  newton:
+    description: "Newtonian 2-body planar validation cases (energy + angular momentum drift)."
+    cases:
+      - name: newton_circular_mu1_r1
+        model: newton
+        params:
+          mu: 1.0
+        # [x, y, vx, vy]
+        state0: [1.0, 0.0, 0.0, 1.0]
+        span: [0.0, 100.0]
+        solver:
+          dt: 1.0e-3
+        criteria:
+          energy_rel_drift_max: 1.0e-6
+          h_rel_drift_max: 1.0e-8
+
+      - name: newton_elliptic_mu1_r1_v0p8
+        model: newton
+        params:
+          mu: 1.0
+        # v < sqrt(mu/r)=1 => bound elliptic
+        state0: [1.0, 0.0, 0.0, 0.8]
+        span: [0.0, 200.0]
+        solver:
+          dt: 5.0e-4
+        criteria:
+          energy_rel_drift_max: 2.0e-6
+          h_rel_drift_max: 2.0e-8
+
+      - name: newton_hyperbolic_mu1_r1_v1p6
+        model: newton
+        params:
+          mu: 1.0
+        # v > 1 => unbound (hyperbolic)
+        state0: [1.0, 0.0, 0.0, 1.6]
+        span: [0.0, 20.0]
+        solver:
+          dt: 1.0e-4
+        criteria:
+          energy_rel_drift_max: 2.0e-6
+          h_rel_drift_max: 2.0e-8
+
+  schwarzschild:
+    description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0)."
+    cases:
+      - name: schwarzschild_circular_M1_r10
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.9561828874675149
+          L: 3.779644730092272
+          # opcional, defaults do C++
+          capture_r: 2.0
+          capture_eps: 1.0e-12
+        # [r0, phi0]
+        state0: [10.0, 0.0]
+        # [tau0, tauf]
+        span: [0.0, 200.0]
+        solver:
+          dt: 1.0e-3
+        criteria:
+          status: BOUND
+          constraint_abs_max: 1.0e-10
+          # circular: r deve permanecer ~constante
+          r_max_dev: 1.0e-3
+
+      - name: schwarzschild_plunge_M1_r5p8
+        model: schwarzschild
+        params:
+          M: 1.0
+          E: 0.9429541672723838
+          L: 3.466162967069742
+          capture_r: 2.0
+          capture_eps: 1.0e-12
+        state0: [5.8, 0.0]
+        span: [0.0, 200.0]
+        solver:
+          dt: 5.0e-4
+        criteria:
+          status: CAPTURE
+          constraint_abs_max: 1.0e-8
+          r_max_dev: null
