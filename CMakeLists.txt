@@ -22,6 +22,7 @@ find_package(pybind11 CONFIG REQUIRED)
 pybind11_add_module(_engine
   src_cpp/bindings/pybind_module.cpp
   src_cpp/lib/api.cpp
+  src_cpp/lib/schwarzschild_equatorial.cpp
 )
 
 # Seus headers

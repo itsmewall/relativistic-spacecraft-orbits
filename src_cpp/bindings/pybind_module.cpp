@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "relorbit/types.hpp"
+#include "relorbit/api.hpp"
 #include "relorbit/models/schwarzschild_equatorial.hpp"
 
 namespace py = pybind11;
@@ -36,9 +38,7 @@ static std::vector<double> rk4_decay(double y0, double k, double t0, double tf, 
 PYBIND11_MODULE(_engine, m) {
     m.doc() = "relorbit C++ engine (pybind11)";
 
-    m.def("hello", []() {
-        return std::string("relorbit C++ engine: OK");
-    });
+    m.def("hello", []() { return std::string("relorbit C++ engine: OK"); });
 
     m.def("rk4_decay", &rk4_decay,
           py::arg("y0"), py::arg("k"), py::arg("t0"), py::arg("tf"), py::arg("n_steps"),
@@ -63,13 +63,19 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("status", &relorbit::TrajectoryNewton::status)
         .def_readonly("message", &relorbit::TrajectoryNewton::message);
 
-    m.def("simulate_newton_rk4", &relorbit::simulate_newton_rk4,
+    // ponteiro explícito para o overload vector
+    using NewtonVecFn = relorbit::TrajectoryNewton (*)(
+        double, const std::vector<double>&, double, double, const relorbit::SolverCfg&
+    );
+    NewtonVecFn newton_vec = &relorbit::simulate_newton_rk4;
+
+    m.def("simulate_newton_rk4", newton_vec,
           py::arg("mu"),
           py::arg("state0"),
           py::arg("t0"),
           py::arg("tf"),
           py::arg("cfg"),
-          "Simulate Newtonian 2-body planar orbit with RK4 fixed-step.");
+          "Simulate Newtonian 2-body planar orbit with RK4 fixed-step (state0=[x,y,vx,vy]).");
 
     py::class_<relorbit::TrajectorySchwarzschildEq>(m, "TrajectorySchwarzschildEq")
         .def_readonly("tau", &relorbit::TrajectorySchwarzschildEq::tau)
@@ -80,6 +86,10 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("epsilon", &relorbit::TrajectorySchwarzschildEq::epsilon)
         .def_readonly("E_series", &relorbit::TrajectorySchwarzschildEq::E_series)
         .def_readonly("L_series", &relorbit::TrajectorySchwarzschildEq::L_series)
+        .def_readonly("ut_fd", &relorbit::TrajectorySchwarzschildEq::ut_fd)
+        .def_readonly("ur_fd", &relorbit::TrajectorySchwarzschildEq::ur_fd)
+        .def_readonly("uphi_fd", &relorbit::TrajectorySchwarzschildEq::uphi_fd)
+        .def_readonly("norm_u", &relorbit::TrajectorySchwarzschildEq::norm_u)
         .def_readonly("status", &relorbit::TrajectorySchwarzschildEq::status)
         .def_readonly("message", &relorbit::TrajectorySchwarzschildEq::message)
         .def_readonly("M", &relorbit::TrajectorySchwarzschildEq::M)

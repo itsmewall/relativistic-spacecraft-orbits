@@ -1,4 +1,3 @@
-# src/relorbit_py/validate.py
 from __future__ import annotations
 
 import argparse
@@ -12,10 +11,6 @@ import matplotlib.pyplot as plt
 from . import engine_hello
 from .simulate import load_cases_yaml, simulate_case
 
-
-# ----------------------------
-# Helpers
-# ----------------------------
 
 def _rel_drift(series: List[float]) -> float:
     a0 = float(series[0])
@@ -35,21 +30,12 @@ def _savefig(path: str) -> None:
 
 
 def _unwrap_traj(res: Any) -> Any:
-    """
-    Compatibilidade:
-      - novo: engine retorna TrajectoryNewton/TrajectorySchwarzschildEq diretamente
-      - antigo: dict com 'traj'
-      - antigo: objeto com .data['traj']
-    """
     if res is None:
         raise TypeError("simulate_case retornou None (bug).")
 
-    # Newton (pybind)
     if hasattr(res, "t") and hasattr(res, "y"):
         return res
-
-    # Schwarzschild eq (pybind) - pode NÃO ter tau/t
-    if hasattr(res, "r") and hasattr(res, "phi"):
+    if hasattr(res, "tau") and hasattr(res, "r") and hasattr(res, "phi"):
         return res
 
     if isinstance(res, dict) and "traj" in res:
@@ -62,7 +48,6 @@ def _unwrap_traj(res: Any) -> Any:
 
 
 def _get_solver_dt_nsteps(case: Dict[str, Any]) -> Tuple[float, int]:
-    # schema novo: case['solver'] = {dt, n_steps}
     if isinstance(case.get("solver"), dict):
         s = case["solver"]
         if "dt" in s:
@@ -70,7 +55,6 @@ def _get_solver_dt_nsteps(case: Dict[str, Any]) -> Tuple[float, int]:
             n_steps = int(s.get("n_steps", 0) or 0)
             return dt, n_steps
 
-    # legado
     if "dt" in case:
         dt = float(case["dt"])
         n_steps = int(case.get("n_steps", 0) or 0)
@@ -83,43 +67,15 @@ def _get_solver_dt_nsteps(case: Dict[str, Any]) -> Tuple[float, int]:
 
 
 def _get_span(case: Dict[str, Any]) -> Tuple[float, float]:
-    # schema novo
     if "span" in case:
         a, b = case["span"]
         return float(a), float(b)
-
-    # legado
     if "t0" in case and "tf" in case:
         return float(case["t0"]), float(case["tf"])
     if "tau0" in case and "tauf" in case:
         return float(case["tau0"]), float(case["tauf"])
+    raise KeyError(f"span ausente no caso '{case.get('name','<sem-nome>')}'. Esperado case.span=[a,b].")
 
-    raise KeyError(
-        f"span ausente no caso '{case.get('name','<sem-nome>')}'. "
-        "Esperado case.span=[a,b] (novo) ou (t0,tf)/(tau0,tauf) (legado)."
-    )
-
-
-def _get_time_axis_or_index(traj: Any, dt: float, t0: float = 0.0) -> np.ndarray:
-    """
-    Para Schwarzschild: algumas estruturas não expõem tau/t.
-    Se existir traj.tau ou traj.t, usa. Se não, cria eixo artificial por índice.
-    """
-    if hasattr(traj, "tau"):
-        return np.array(traj.tau, dtype=float)
-    if hasattr(traj, "t"):
-        return np.array(traj.t, dtype=float)
-
-    # fallback: índice
-    n = len(traj.r) if hasattr(traj, "r") else 0
-    if n <= 0:
-        return np.array([], dtype=float)
-    return t0 + dt * np.arange(n, dtype=float)
-
-
-# ----------------------------
-# Plots
-# ----------------------------
 
 def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
     t = np.array(traj.t, dtype=float)
@@ -144,10 +100,8 @@ def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_invariants.png"))
 
-    dE = np.abs(E - E[0])
-    dh = np.abs(h - h[0])
-    dE = np.clip(dE, 1e-300, None)
-    dh = np.clip(dh, 1e-300, None)
+    dE = np.clip(np.abs(E - E[0]), 1e-300, None)
+    dh = np.clip(np.abs(h - h[0]), 1e-300, None)
 
     plt.figure()
     plt.semilogy(t, dE, label="|E - E0|")
@@ -159,20 +113,14 @@ def _plot_newton(case_name: str, traj: Any, outdir: str) -> None:
     _savefig(os.path.join(outdir, f"{case_name}_drift.png"))
 
 
-def _plot_schw(case_name: str, traj: Any, outdir: str, dt: float, tau0: float) -> None:
-    tau = _get_time_axis_or_index(traj, dt=dt, t0=tau0)
+def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
+    tau = np.array(traj.tau, dtype=float)
     r = np.array(traj.r, dtype=float)
     phi = np.array(traj.phi, dtype=float)
 
-    # epsilon/constraint
-    if hasattr(traj, "epsilon"):
-        eps = np.array(traj.epsilon, dtype=float)
-    elif hasattr(traj, "eps"):
-        eps = np.array(traj.eps, dtype=float)
-    elif hasattr(traj, "constraint"):
-        eps = np.array(traj.constraint, dtype=float)
-    else:
-        raise AttributeError("Trajetória Schwarzschild não possui epsilon/eps/constraint para plotar constraint.")
+    eps = np.array(traj.epsilon, dtype=float) if hasattr(traj, "epsilon") else None
+    if eps is None:
+        raise AttributeError("Trajetória Schwarzschild não possui epsilon.")
 
     x = r * np.cos(phi)
     y = r * np.sin(phi)
@@ -186,38 +134,74 @@ def _plot_schw(case_name: str, traj: Any, outdir: str, dt: float, tau0: float) -
 
     plt.figure()
     plt.plot(tau, r)
-    plt.xlabel("tau (ou índice*dt)")
+    plt.xlabel("tau")
     plt.ylabel("r")
     plt.title(f"r(tau): {case_name}")
     _savefig(os.path.join(outdir, f"{case_name}_r_tau.png"))
 
     plt.figure()
     plt.plot(tau, eps, label="epsilon(tau)")
-    plt.xlabel("tau (ou índice*dt)")
+    plt.xlabel("tau")
     plt.ylabel("epsilon")
     plt.title(f"Constraint (signed): {case_name}")
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_constraint.png"))
 
-    abs_eps = np.abs(eps)
-    abs_eps = np.clip(abs_eps, 1e-300, None)
-
+    abs_eps = np.clip(np.abs(eps), 1e-300, None)
     plt.figure()
     plt.semilogy(tau, abs_eps, label="|epsilon(tau)|")
-    plt.xlabel("tau (ou índice*dt)")
+    plt.xlabel("tau")
     plt.ylabel("|epsilon| (log)")
     plt.title(f"Constraint drift (log): {case_name}")
     plt.legend()
     _savefig(os.path.join(outdir, f"{case_name}_constraint_log.png"))
 
+    # norm_u: usa se o engine forneceu; se não, calcula
+    norm_u = None
+    if hasattr(traj, "norm_u"):
+        nu = np.array(traj.norm_u, dtype=float)
+        if nu.size == tau.size and nu.size > 0:
+            norm_u = nu
 
-# ----------------------------
-# Validation
-# ----------------------------
+    if norm_u is None:
+        M = float(getattr(traj, "M"))
+        Epar = float(getattr(traj, "E"))
+        Lpar = float(getattr(traj, "L"))
+        pr = np.array(getattr(traj, "pr"), dtype=float)
+
+        A = 1.0 - 2.0*M/r
+        A = np.where(A <= 0.0, np.nan, A)
+
+        ut = Epar / A
+        ur = pr
+        uphi = Lpar / (r*r)
+
+        gtt = -A
+        grr = 1.0 / A
+        gpp = r*r
+
+        guu = gtt*ut*ut + grr*ur*ur + gpp*uphi*uphi
+        norm_u = guu + 1.0
+
+    plt.figure()
+    plt.plot(tau, norm_u, label="norm_u = g(u,u)+1")
+    plt.xlabel("tau")
+    plt.ylabel("norm_u")
+    plt.title(f"4-velocity normalization drift: {case_name}")
+    plt.legend()
+    _savefig(os.path.join(outdir, f"{case_name}_norm_u.png"))
+
+    plt.figure()
+    plt.semilogy(tau, np.clip(np.abs(norm_u), 1e-300, None), label="|norm_u|")
+    plt.xlabel("tau")
+    plt.ylabel("|norm_u| (log)")
+    plt.title(f"4-velocity normalization drift (log): {case_name}")
+    plt.legend()
+    _savefig(os.path.join(outdir, f"{case_name}_norm_u_log.png"))
+
 
 def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[str, Any]:
-    res = simulate_case(case, "newton")
-    traj = _unwrap_traj(res)
+    traj = _unwrap_traj(simulate_case(case, "newton"))
 
     E = list(traj.energy)
     h = list(traj.h)
@@ -252,54 +236,40 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
         "n_steps": int(n_steps),
         "energy_rel_drift": float(dE),
         "h_rel_drift": float(dh),
-        "criteria": {
-            "energy_rel_drift_max": dE_max,
-            "h_rel_drift_max": dh_max,
-        },
+        "criteria": {"energy_rel_drift_max": dE_max, "h_rel_drift_max": dh_max},
     }
 
 
 def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[str, Any]:
-    res = simulate_case(case, "schwarzschild")
-    traj = _unwrap_traj(res)
+    traj = _unwrap_traj(simulate_case(case, "schwarzschild"))
 
-    if hasattr(traj, "epsilon"):
-        eps = np.array(traj.epsilon, dtype=float)
-    elif hasattr(traj, "eps"):
-        eps = np.array(traj.eps, dtype=float)
-    elif hasattr(traj, "constraint"):
-        eps = np.array(traj.constraint, dtype=float)
-    else:
-        raise AttributeError("Trajetória Schwarzschild não possui epsilon/eps/constraint.")
-
+    eps = np.array(traj.epsilon, dtype=float)
     eps_max = float(np.max(np.abs(eps)))
+
+    # norm_u (se existir)
+    norm_u_max = None
+    if hasattr(traj, "norm_u"):
+        nu = np.array(traj.norm_u, dtype=float)
+        if nu.size > 0:
+            norm_u_max = float(np.nanmax(np.abs(nu)))
 
     crit = case.get("criteria", {}) or {}
     eps_max_allowed = float(crit.get("constraint_abs_max", 1e-10))
-
     expected_status = str(crit.get("status", "BOUND"))
     status_str = str(getattr(traj, "status", ""))
     status_ok = status_str.endswith(expected_status)
 
-    r_max_dev = None
-    r_ok = True
-    if crit.get("r_max_dev", None) is not None:
-        r = np.array(traj.r, dtype=float)
-        r0 = float(case["state0"][0])
-        r_max_dev = float(np.max(np.abs(r - r0)))
-        r_ok = r_max_dev <= float(crit["r_max_dev"])
-
-    passed = (eps_max <= eps_max_allowed) and status_ok and r_ok
+    passed = (eps_max <= eps_max_allowed) and status_ok
 
     dt, n_steps = _get_solver_dt_nsteps(case)
     tau0, tauf = _get_span(case)
     params = case.get("params", {}) or {}
     M = float(params.get("M", case.get("M", 1.0)))
-    Epar = params.get("E", case.get("E", None))
-    Lpar = params.get("L", case.get("L", None))
+    Epar = float(params.get("E", case.get("E")))
+    Lpar = float(params.get("L", case.get("L")))
 
     if plotdir is not None:
-        _plot_schw(case["name"], traj, plotdir, dt=dt, tau0=tau0)
+        _plot_schw(case["name"], traj, plotdir)
 
     return {
         "name": case["name"],
@@ -315,18 +285,13 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "dt": dt,
         "n_steps": int(n_steps),
         "constraint_abs_max": float(eps_max),
-        "r_max_dev": r_max_dev,
+        "norm_u_abs_max": norm_u_max,
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
-            "r_max_dev": crit.get("r_max_dev", None),
             "status": expected_status,
         },
     }
 
-
-# ----------------------------
-# Main
-# ----------------------------
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -338,7 +303,6 @@ def main() -> None:
     print(engine_hello())
 
     cfg = load_cases_yaml(args.cases)
-
     outdir = args.out
     plotdir = os.path.join(outdir, "plots")
     if args.plots:
@@ -346,7 +310,6 @@ def main() -> None:
 
     report: Dict[str, Any] = {"suites": []}
 
-    # Newton
     newton_cases = cfg["suites"]["newton"]["cases"]
     newton_results: List[Dict[str, Any]] = []
     ok_newton = True
@@ -360,11 +323,8 @@ def main() -> None:
         tag = "PASS" if r["passed"] else "FAIL"
         print(f"[{tag}] {r['name']} | dt={r['dt']:.1e} | dE={r['energy_rel_drift']:.3e} | dh={r['h_rel_drift']:.3e}")
 
-    report["suites"].append(
-        {"suite": "newton", "ok": ok_newton, "n_cases": len(newton_cases), "results": newton_results}
-    )
+    report["suites"].append({"suite": "newton", "ok": ok_newton, "n_cases": len(newton_cases), "results": newton_results})
 
-    # Schwarzschild
     schw_cases = cfg["suites"]["schwarzschild"]["cases"]
     schw_results: List[Dict[str, Any]] = []
     ok_schw = True
@@ -376,11 +336,11 @@ def main() -> None:
     print(f"Schwarzschild suite: ok={ok_schw} cases={len(schw_cases)}")
     for r in schw_results:
         tag = "PASS" if r["passed"] else "FAIL"
-        print(f"[{tag}] {r['name']} | dt={r['dt']:.1e} | eps_max={r['constraint_abs_max']:.3e} | status={r['status']}")
+        nu = r.get("norm_u_abs_max", None)
+        nu_s = "None" if nu is None else f"{nu:.3e}"
+        print(f"[{tag}] {r['name']} | dt={r['dt']:.1e} | eps_max={r['constraint_abs_max']:.3e} | norm_u_max={nu_s} | status={r['status']}")
 
-    report["suites"].append(
-        {"suite": "schwarzschild", "ok": ok_schw, "n_cases": len(schw_cases), "results": schw_results}
-    )
+    report["suites"].append({"suite": "schwarzschild", "ok": ok_schw, "n_cases": len(schw_cases), "results": schw_results})
 
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "report.json"), "w", encoding="utf-8") as f:

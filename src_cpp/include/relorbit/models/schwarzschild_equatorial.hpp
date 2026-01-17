@@ -3,24 +3,9 @@
 #include <string>
 #include <vector>
 
+#include "relorbit/types.hpp"  // <<< fonte única: OrbitStatus, SolverCfg, TrajectoryNewton
+
 namespace relorbit {
-
-enum class OrbitStatus { BOUND, UNBOUND, CAPTURE, ERROR };
-
-struct SolverCfg {
-    double dt = 1e-3;
-    int n_steps = 0; // se 0, calcula por (tf-t0)/dt
-};
-
-// Trajetória Newton (mantém compatibilidade com o que você já tinha)
-struct TrajectoryNewton {
-    std::vector<double> t;
-    std::vector<std::vector<double>> y; // [x,y,vx,vy]
-    std::vector<double> energy;
-    std::vector<double> h;
-    OrbitStatus status = OrbitStatus::ERROR;
-    std::string message;
-};
 
 // Trajetória Schwarzschild (equatorial)
 struct TrajectorySchwarzschildEq {
@@ -37,19 +22,29 @@ struct TrajectorySchwarzschildEq {
     // momento radial pr = dr/dtau
     std::vector<double> pr;
 
-    // diagnóstico do constraint:
+    // diagnóstico "por construção" (não usar como validação principal)
     // epsilon(tau) = pr^2 + V_eff(r) - E^2  (deve ser ~0)
     std::vector<double> epsilon;
 
-    // séries de E e L "reconstruídas" do estado (devem ser constantes)
-    // Aqui, por construção, E e L são parâmetros; ainda assim guardamos para auditoria.
+    // séries de E e L (parâmetros constantes; guardado para auditoria)
     std::vector<double> E_series;
     std::vector<double> L_series;
+
+    // =========================================
+    // NOVO: checagem independente via FD
+    // =========================================
+    // u^t, u^r, u^phi obtidos por derivada numérica de (tcoord,r,phi) em função de tau
+    std::vector<double> ut_fd;
+    std::vector<double> ur_fd;
+    std::vector<double> uphi_fd;
+
+    // norm_u = g_{μν} u^μ u^ν + 1 (timelike). Deve tender a 0 quando dt -> 0.
+    std::vector<double> norm_u;
 
     OrbitStatus status = OrbitStatus::ERROR;
     std::string message;
 
-    // parâmetros do caso (úteis para relatório)
+    // parâmetros do caso
     double M = 0.0;
     double E = 0.0;
     double L = 0.0;
@@ -83,15 +78,7 @@ inline double L_circular(double M, double r) {
     return std::sqrt(M * r) / std::sqrt(1.0 - 3.0 * M / r);
 }
 
-// API (declarações)
-TrajectoryNewton simulate_newton_rk4(
-    double mu,
-    const std::vector<double>& state0, // [x,y,vx,vy]
-    double t0,
-    double tf,
-    const SolverCfg& cfg
-);
-
+// API Schwarzschild
 TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double M,
     double E,
@@ -101,8 +88,8 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double tau0,
     double tauf,
     const SolverCfg& cfg,
-    double capture_r = 2.0,     // limiar de captura em unidades de M: r <= capture_r*M
-    double capture_eps = 1e-12  // tolerância numérica (evita falso “cruzou” por ruído)
+    double capture_r = 2.0,     // r <= capture_r*M
+    double capture_eps = 1e-12
 );
 
 } // namespace relorbit

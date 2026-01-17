@@ -16,8 +16,8 @@
           "tf": 100.0,
           "dt": 0.001,
           "n_steps": 0,
-          "energy_rel_drift": 2.3092638912203256e-14,
-          "h_rel_drift": 1.1546319456101628e-14,
+          "energy_rel_drift": 3.26405569239796e-14,
+          "h_rel_drift": 1.6209256159527285e-14,
           "criteria": {
             "energy_rel_drift_max": 1e-06,
             "h_rel_drift_max": 1e-08
@@ -34,8 +34,8 @@
           "tf": 200.0,
           "dt": 0.0005,
           "n_steps": 0,
-          "energy_rel_drift": 1.2310414125990708e-13,
-          "h_rel_drift": 2.0539125955565396e-14,
+          "energy_rel_drift": 1.4694128267097662e-13,
+          "h_rel_drift": 5.037636974236648e-14,
           "criteria": {
             "energy_rel_drift_max": 2e-06,
             "h_rel_drift_max": 2e-08
@@ -80,10 +80,9 @@
           "dt": 0.001,
           "n_steps": 0,
           "constraint_abs_max": 0.0,
-          "r_max_dev": 0.0,
+          "norm_u_abs_max": 1.2710943408933417e-11,
           "criteria": {
             "constraint_abs_max": 1e-10,
-            "r_max_dev": 0.001,
             "status": "BOUND"
           }
         },
@@ -101,10 +100,9 @@
           "dt": 0.0005,
           "n_steps": 0,
           "constraint_abs_max": 1.1102230246251565e-16,
-          "r_max_dev": null,
+          "norm_u_abs_max": 7.576628213712411e-11,
           "criteria": {
             "constraint_abs_max": 1e-08,
-            "r_max_dev": null,
             "status": "CAPTURE"
           }
         }

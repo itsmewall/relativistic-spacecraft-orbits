@@ -22,6 +22,11 @@ O objetivo final do TCC é evoluir este núcleo para uma **missão completa**: f
 
 ---
 
+## Convenções e Unidades
+
+Antes de ler os resultados e rodar validações, consulte as convenções oficiais do projeto:
+- `docs/conventions.md` (unidades, assinatura do métrico, definições de μ/M/E/L e estados).
+
 ## 2. Modelos Físicos e Equações Regentes
 
 > Importante: este projeto separa explicitamente **regimes físicos** e **sistemas de unidades**.
