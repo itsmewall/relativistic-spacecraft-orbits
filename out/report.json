@@ -20,6 +20,12 @@
           "status_theory": "BOUND",
           "energy_rel_drift": 3.26405569239796e-14,
           "h_rel_drift": 1.6209256159527285e-14,
+          "y_end": [
+            0.8623188722901146,
+            -0.5063656411055426,
+            0.5063656411056071,
+            0.8623188722901515
+          ],
           "criteria": {
             "energy_rel_drift_max": 1e-06,
             "h_rel_drift_max": 1e-08,
@@ -42,6 +48,12 @@
           "status_theory": "BOUND",
           "energy_rel_drift": 1.4694128267097662e-13,
           "h_rel_drift": 5.037636974236648e-14,
+          "y_end": [
+            -0.4621821302624652,
+            0.10343263369413772,
+            -0.27298744099341965,
+            -1.669826978326328
+          ],
           "criteria": {
             "energy_rel_drift_max": 2e-06,
             "h_rel_drift_max": 2e-08,
@@ -64,6 +76,12 @@
           "status_theory": "UNBOUND",
           "energy_rel_drift": 7.731910350068047e-14,
           "h_rel_drift": 1.584843367652411e-13,
+          "y_end": [
+            -9.972524803022313,
+            15.125457462971946,
+            -0.521793814944902,
+            0.6309706194447311
+          ],
           "criteria": {
             "energy_rel_drift_max": 2e-06,
             "h_rel_drift_max": 2e-08,
@@ -71,7 +89,185 @@
             "status_must_match_theory": true
           }
         }
-      ]
+      ],
+      "ok_convergence": true,
+      "convergence": [
+        {
+          "name": "newton_circular_mu1_r1",
+          "passed": true,
+          "inconclusive": false,
+          "reason": "SATURATED(roundoff floor)",
+          "dt_targets": [
+            0.001,
+            0.0005,
+            0.00025
+          ],
+          "dt_effective": [
+            0.001,
+            0.0005,
+            0.00025
+          ],
+          "e_dt": 3.272753290383738e-12,
+          "e_dt2": 2.846567438400523e-12,
+          "ratio_e": 1.1497192183940275,
+          "p_obs": 0.20128157274306152,
+          "abs_err_proxy": 2.846567438400523e-12,
+          "rel_err_proxy": 2.012827138797821e-12,
+          "roundoff_floor_est": 3.9720596102608577e-11,
+          "saturated": true,
+          "criteria": {
+            "convergence_min_order": 3.6,
+            "convergence_abs_err_max": 1e-09,
+            "convergence_rel_err_max": 1e-06
+          },
+          "runs": [
+            {
+              "dt": 0.001,
+              "n_steps": 100000,
+              "energy_rel_drift": 3.26405569239796e-14,
+              "h_rel_drift": 1.6209256159527285e-14,
+              "status": "OrbitStatus.BOUND",
+              "passed_invariants": true,
+              "msg": ""
+            },
+            {
+              "dt": 0.0005,
+              "n_steps": 200000,
+              "energy_rel_drift": 3.930189507173054e-14,
+              "h_rel_drift": 1.9539925233402755e-14,
+              "status": "OrbitStatus.BOUND",
+              "passed_invariants": true,
+              "msg": ""
+            },
+            {
+              "dt": 0.00025,
+              "n_steps": 400000,
+              "energy_rel_drift": 7.682743330406083e-14,
+              "h_rel_drift": 3.8413716652030416e-14,
+              "status": "OrbitStatus.BOUND",
+              "passed_invariants": true,
+              "msg": ""
+            }
+          ]
+        },
+        {
+          "name": "newton_elliptic_mu1_r1_v0p8",
+          "passed": true,
+          "inconclusive": false,
+          "reason": "SATURATED(roundoff floor)",
+          "dt_targets": [
+            0.0005,
+            0.00025,
+            0.000125
+          ],
+          "dt_effective": [
+            0.0005,
+            0.00025,
+            0.000125
+          ],
+          "e_dt": 1.7262791320251858e-10,
+          "e_dt2": 7.202718716491887e-11,
+          "ratio_e": 2.396704910983914,
+          "p_obs": 1.2610522912702395,
+          "abs_err_proxy": 7.202718716491887e-11,
+          "rel_err_proxy": 4.083333129002524e-11,
+          "roundoff_floor_est": 9.90859301969816e-11,
+          "saturated": true,
+          "criteria": {
+            "convergence_min_order": 3.6,
+            "convergence_abs_err_max": 1e-09,
+            "convergence_rel_err_max": 1e-06
+          },
+          "runs": [
+            {
+              "dt": 0.0005,
+              "n_steps": 400000,
+              "energy_rel_drift": 1.4694128267097662e-13,
+              "h_rel_drift": 5.037636974236648e-14,
+              "status": "OrbitStatus.BOUND",
+              "passed_invariants": true,
+              "msg": ""
+            },
+            {
+              "dt": 0.00025,
+              "n_steps": 800000,
+              "energy_rel_drift": 1.5183932542667583e-13,
+              "h_rel_drift": 9.06219543850284e-14,
+              "status": "OrbitStatus.BOUND",
+              "passed_invariants": true,
+              "msg": ""
+            },
+            {
+              "dt": 0.000125,
+              "n_steps": 1600000,
+              "energy_rel_drift": 1.9510536976868561e-13,
+              "h_rel_drift": 1.4155343563970746e-13,
+              "status": "OrbitStatus.BOUND",
+              "passed_invariants": true,
+              "msg": ""
+            }
+          ]
+        },
+        {
+          "name": "newton_hyperbolic_mu1_r1_v1p6",
+          "passed": true,
+          "inconclusive": false,
+          "reason": "SATURATED(roundoff floor)",
+          "dt_targets": [
+            0.0001,
+            5e-05,
+            2.5e-05
+          ],
+          "dt_effective": [
+            0.0001,
+            5e-05,
+            2.5e-05
+          ],
+          "e_dt": 6.796241739210826e-13,
+          "e_dt2": 4.785123701871357e-13,
+          "ratio_e": 1.4202854853162865,
+          "p_obs": 0.5061809486407813,
+          "abs_err_proxy": 4.785123701871357e-13,
+          "rel_err_proxy": 2.638520675509718e-14,
+          "roundoff_floor_est": 7.203576187028128e-10,
+          "saturated": true,
+          "criteria": {
+            "convergence_min_order": 3.6,
+            "convergence_abs_err_max": 1e-09,
+            "convergence_rel_err_max": 1e-06
+          },
+          "runs": [
+            {
+              "dt": 0.0001,
+              "n_steps": 200000,
+              "energy_rel_drift": 7.731910350068047e-14,
+              "h_rel_drift": 1.584843367652411e-13,
+              "status": "OrbitStatus.UNBOUND",
+              "passed_invariants": true,
+              "msg": ""
+            },
+            {
+              "dt": 5e-05,
+              "n_steps": 400000,
+              "energy_rel_drift": 8.287021862380625e-14,
+              "h_rel_drift": 3.7719827261639693e-13,
+              "status": "OrbitStatus.UNBOUND",
+              "passed_invariants": true,
+              "msg": ""
+            },
+            {
+              "dt": 2.5e-05,
+              "n_steps": 800000,
+              "energy_rel_drift": 9.67480064316207e-14,
+              "h_rel_drift": 3.011479954295737e-13,
+              "status": "OrbitStatus.UNBOUND",
+              "passed_invariants": true,
+              "msg": ""
+            }
+          ]
+        }
+      ],
+      "ok_total": true
     },
     {
       "suite": "schwarzschild",
@@ -295,7 +491,7 @@
           "name": "schwarzschild_plunge_M1_r5p8_dt5e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
-          "message": "capture: r crossed capture radius (r_prev=2.500065e+00, r_now=2.499788e+00, r_cap=2.500000e+00, capture_r=2.500000e+00, M=1.000000e+00)",
+          "message": "horizon crossed (r <= 2M*(1+eps))",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -305,28 +501,37 @@
           "tauf": 200.0,
           "dt": 0.0005,
           "n_steps": 0,
-          "r_min": 2.5,
-          "r_end": 2.5,
-          "constraint_abs_max": 4.902792061223238e-09,
-          "norm_u_abs_max": 0.0006868893034870371,
+          "r_min": 2.000000000002,
+          "r_end": 2.000000000002,
+          "constraint_abs_max": 4.2631038144058664e-08,
+          "norm_u_abs_max": 889169578106.7524,
           "events": [
             {
-              "kind": "capture",
+              "kind": "r_cap",
               "tau": 56.41911681622785,
               "tcoord": 93.18145841040804,
               "r": 2.5,
               "phi": 8.641909615605792,
               "pr": -0.5523634886757126,
               "i": 0
+            },
+            {
+              "kind": "horizon",
+              "tau": 57.122916331524436,
+              "tcoord": 111.4226977958595,
+              "r": 2.000000000002,
+              "phi": 9.12023467955961,
+              "pr": -0.943166265407849,
+              "i": 1
             }
           ],
-          "events_compact": "capture@56.4191",
+          "events_compact": "r_cap@56.4191; horizon@57.1229",
           "criteria": {
-            "constraint_abs_max": 1e-08,
+            "constraint_abs_max": 1e-06,
             "status": "CAPTURE",
             "min_events": 0,
             "must_have_events": [
-              "capture"
+              "horizon"
             ],
             "must_not_have_events": null
           },
@@ -336,7 +541,7 @@
           "name": "schwarzschild_plunge_M1_r5p8_dt2p5e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
-          "message": "capture: r crossed capture radius (r_prev=2.500065e+00, r_now=2.499926e+00, r_cap=2.500000e+00, capture_r=2.500000e+00, M=1.000000e+00)",
+          "message": "horizon crossed (r <= 2M*(1+eps))",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -346,28 +551,37 @@
           "tauf": 200.0,
           "dt": 0.00025,
           "n_steps": 0,
-          "r_min": 2.5,
-          "r_end": 2.5,
-          "constraint_abs_max": 1.7037374844264264e-09,
-          "norm_u_abs_max": 0.0002007551296427934,
+          "r_min": 2.000000000002,
+          "r_end": 2.000000000002,
+          "constraint_abs_max": 1.7037622535021058e-08,
+          "norm_u_abs_max": 889405440700.0321,
           "events": [
             {
-              "kind": "capture",
+              "kind": "r_cap",
               "tau": 56.41911682462164,
               "tcoord": 93.18145838866059,
               "r": 2.5,
               "phi": 8.64190961662859,
               "pr": -0.5523634857799251,
               "i": 0
+            },
+            {
+              "kind": "horizon",
+              "tau": 57.122916342716735,
+              "tcoord": 116.28603287242821,
+              "r": 2.000000000002,
+              "phi": 9.12023468063004,
+              "pr": -0.9431662518400313,
+              "i": 1
             }
           ],
-          "events_compact": "capture@56.4191",
+          "events_compact": "r_cap@56.4191; horizon@57.1229",
           "criteria": {
-            "constraint_abs_max": 1e-08,
+            "constraint_abs_max": 1e-06,
             "status": "CAPTURE",
             "min_events": 0,
             "must_have_events": [
-              "capture"
+              "horizon"
             ],
             "must_not_have_events": null
           },
@@ -377,7 +591,7 @@
           "name": "schwarzschild_plunge_M1_r5p8_dt1p25e4",
           "passed": true,
           "status": "OrbitStatus.CAPTURE",
-          "message": "capture: r crossed capture radius (r_prev=2.500065e+00, r_now=2.499995e+00, r_cap=2.500000e+00, capture_r=2.500000e+00, M=1.000000e+00)",
+          "message": "horizon crossed (r <= 2M*(1+eps))",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -387,28 +601,37 @@
           "tauf": 200.0,
           "dt": 0.000125,
           "n_steps": 0,
-          "r_min": 2.5,
-          "r_end": 2.5,
-          "constraint_abs_max": 1.045369346641678e-10,
-          "norm_u_abs_max": 0.00024061453003865196,
+          "r_min": 2.000000000002,
+          "r_end": 2.000000000002,
+          "constraint_abs_max": 4.23564772145113e-09,
+          "norm_u_abs_max": 889523418589.578,
           "events": [
             {
-              "kind": "capture",
+              "kind": "r_cap",
               "tau": 56.419116828120906,
               "tcoord": 93.18145837778982,
               "r": 2.5,
               "phi": 8.641909617139722,
               "pr": -0.5523634843323271,
               "i": 0
+            },
+            {
+              "kind": "horizon",
+              "tau": 57.12291634759597,
+              "tcoord": 111.66699067853183,
+              "r": 2.000000000002,
+              "phi": 9.12023468116492,
+              "pr": -0.9431662450533302,
+              "i": 1
             }
           ],
-          "events_compact": "capture@56.4191",
+          "events_compact": "r_cap@56.4191; horizon@57.1229",
           "criteria": {
-            "constraint_abs_max": 1e-08,
+            "constraint_abs_max": 1e-06,
             "status": "CAPTURE",
             "min_events": 0,
             "must_have_events": [
-              "capture"
+              "horizon"
             ],
             "must_not_have_events": null
           },
@@ -474,9 +697,9 @@
             0.000125
           ],
           "norm_u_abs_max": [
-            0.0006868893034870371,
-            0.0002007551296427934,
-            0.00024061453003865196
+            889169578106.7524,
+            889405440700.0321,
+            889523418589.578
           ],
           "violations": [],
           "abs_tol": 1e-09,

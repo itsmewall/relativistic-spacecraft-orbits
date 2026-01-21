@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import math
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
@@ -76,6 +78,17 @@ def _get_solver_dt_nsteps(case: Dict[str, Any]) -> Tuple[float, int]:
     )
 
 
+def _set_solver_dt_nsteps(case: Dict[str, Any], dt: float, n_steps: int) -> None:
+    """Atualiza (in-place) dt e n_steps, suportando formato novo (case.solver) e legado."""
+    if isinstance(case.get("solver"), dict):
+        case["solver"]["dt"] = float(dt)
+        case["solver"]["n_steps"] = int(n_steps)
+        return
+    # legado
+    case["dt"] = float(dt)
+    case["n_steps"] = int(n_steps)
+
+
 def _get_span(case: Dict[str, Any]) -> Tuple[float, float]:
     if "span" in case:
         a, b = case["span"]
@@ -133,6 +146,24 @@ def _status_endswith(status_str: str, expected_tail: str) -> bool:
     # status_str costuma vir como "OrbitStatus.BOUND"
     # expected_tail pode vir como "BOUND"
     return str(status_str).endswith(str(expected_tail))
+
+
+def _safe_norm(x: np.ndarray) -> float:
+    x = np.asarray(x, dtype=float).reshape(-1)
+    return float(np.linalg.norm(x, ord=2))
+
+
+def _estimate_order_from_three(e_dt: float, e_dt2: float) -> Optional[float]:
+    """
+    Ordem observada p ≈ log2(e_dt / e_dt2), onde:
+      e_dt  = ||y_dt(tf) - y_dt/2(tf)||
+      e_dt2 = ||y_dt/2(tf) - y_dt/4(tf)||
+    """
+    if not (np.isfinite(e_dt) and np.isfinite(e_dt2)):
+        return None
+    if e_dt <= 0.0 or e_dt2 <= 0.0:
+        return None
+    return float(math.log(e_dt / e_dt2, 2.0))
 
 
 # ============================================================
@@ -348,6 +379,43 @@ def _plot_schw(case_name: str, traj: Any, outdir: str) -> None:
             _savefig(os.path.join(outdir, f"{case_name}_norm_u_log.png"))
 
 
+def _plot_convergence_newton(
+    base_name: str,
+    dts: List[float],
+    errs: List[float],
+    outdir: str,
+    p_obs: Optional[float],
+) -> None:
+    # loglog dt vs error
+    plt.figure()
+    plt.loglog(dts, errs, marker="o")
+    plt.xlabel("dt")
+    plt.ylabel("||y_dt(tf) - y_ref(tf)|| (proxy)")
+    title = f"Newton convergence: {base_name}"
+    if p_obs is not None:
+        title += f" | p_obs≈{p_obs:.3f}"
+    plt.title(title)
+    _savefig(os.path.join(outdir, f"{base_name}_convergence_loglog.png"))
+
+
+def _plot_convergence_overlay_newton(
+    base_name: str,
+    trajs: List[Any],
+    labels: List[str],
+    outdir: str,
+) -> None:
+    # overlay x-y paths
+    plt.figure()
+    for tr, lab in zip(trajs, labels):
+        y = np.array(tr.y, dtype=float)
+        plt.plot(y[:, 0], y[:, 1], label=lab)
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title(f"Newton overlay (dt refinement): {base_name}")
+    plt.legend()
+    _savefig(os.path.join(outdir, f"{base_name}_overlay_orbit.png"))
+
+
 # ============================================================
 # Validators
 # ============================================================
@@ -406,6 +474,15 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
     if (not passed) and status_reason:
         msg = (msg + " | " + status_reason).strip(" |")
 
+    # estado final para convergência (quando usada)
+    y_end = None
+    try:
+        y_arr = np.array(traj.y, dtype=float)
+        if y_arr.ndim == 2 and y_arr.shape[0] >= 1:
+            y_end = [float(v) for v in y_arr[-1, :].tolist()]
+    except Exception:
+        y_end = None
+
     return {
         "name": case["name"],
         "passed": bool(passed),
@@ -415,12 +492,13 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
         "mu": mu,
         "t0": t0,
         "tf": tf,
-        "dt": dt,
+        "dt": float(dt),
         "n_steps": int(n_steps),
         "energy0": energy0,
         "status_theory": theory_status,
         "energy_rel_drift": float(dE),
         "h_rel_drift": float(dh),
+        "y_end": y_end,
         "criteria": {
             "energy_rel_drift_max": dE_max,
             "h_rel_drift_max": dh_max,
@@ -499,7 +577,7 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "pr0": pr0,
         "tau0": tau0,
         "tauf": tauf,
-        "dt": dt,
+        "dt": float(dt),
         "n_steps": int(n_steps),
         "r_min": r_min,
         "r_end": r_end,
@@ -518,7 +596,238 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
 
 
 # ============================================================
-# Convergência automática (Schwarzschild)
+# Convergência automática (Newton) — varrer dt, estimar ordem RK4
+# ============================================================
+
+def _clone_case_with_dt_consistent(case: Dict[str, Any], dt_target: float) -> Dict[str, Any]:
+    """
+    Cria um clone do case, ajustando (dt, n_steps) para:
+      - manter (t0, tf) fixos
+      - usar n_steps inteiro
+      - usar dt_eff = (tf-t0)/n_steps (muito próximo de dt_target)
+
+    Isso evita comparar soluções com tempos finais diferentes.
+    """
+    c = copy.deepcopy(case)
+    t0, tf = _get_span(c)
+    T = float(tf - t0)
+    if T <= 0.0:
+        # Degenerado: mantém dt/n_steps como estão
+        dt0, ns0 = _get_solver_dt_nsteps(c)
+        _set_solver_dt_nsteps(c, float(dt0), int(ns0))
+        return c
+
+    # n_steps robusto: arredonda para o inteiro mais próximo
+    n_steps = int(max(1, round(T / float(dt_target))))
+    dt_eff = T / float(n_steps)
+    _set_solver_dt_nsteps(c, float(dt_eff), int(n_steps))
+    return c
+
+
+def _traj_max_diff_coarse_vs_fine(tr_coarse: Any, tr_fine: Any, stride: int) -> float:
+    """
+    Compara trajetórias no MESMO conjunto de tempos do coarse.
+    Assume que tr_fine tem dt menor e contém amostras nos mesmos tempos:
+      tr_fine.y[0], tr_fine.y[stride], tr_fine.y[2*stride], ...
+    Retorna max ||delta_state||_2 ao longo do tempo.
+    """
+    yc = np.array(tr_coarse.y, dtype=float)
+    yf = np.array(tr_fine.y, dtype=float)
+
+    n = yc.shape[0]
+    need = (n - 1) * stride + 1
+    if yf.shape[0] < need:
+        raise RuntimeError(
+            f"traj_fine curto demais para stride={stride}: "
+            f"len(y_fine)={yf.shape[0]} need>={need}"
+        )
+
+    deltas = yc - yf[0:need:stride, :]
+    norms = np.linalg.norm(deltas, axis=1)
+    return float(np.max(norms))
+
+
+def _roundoff_floor_estimate(tr: Any) -> float:
+    """
+    Estima piso de roundoff (ordem de grandeza) para erro acumulado.
+    Não é "matemática perfeita", é engenharia:
+      floor ~ C * eps * scale * sqrt(N)
+    """
+    y = np.array(tr.y, dtype=float)
+    N = max(1, y.shape[0])
+    scale = max(1.0, float(np.max(np.linalg.norm(y, axis=1))))
+    eps = float(np.finfo(float).eps)
+    C = 200.0  # conservador (rigoroso sem ser suicida)
+    return float(C * eps * scale * math.sqrt(N))
+
+
+def _run_convergence_newton_one_case(
+    base_case: Dict[str, Any],
+    plotdir: Optional[str],
+    rigorous: bool = True,
+) -> Dict[str, Any]:
+    base_name = str(base_case.get("name", "<sem-nome>"))
+    crit = base_case.get("criteria", {}) or {}
+
+    # Defaults rígidos (override no YAML)
+    min_order = float(crit.get("convergence_min_order", 3.6 if rigorous else 3.2))
+    rel_err_max = float(crit.get("convergence_rel_err_max", 1e-6 if rigorous else 1e-5))
+    abs_err_max = float(crit.get("convergence_abs_err_max", 1e-9 if rigorous else 1e-8))
+
+    dt0, _ = _get_solver_dt_nsteps(base_case)
+    dt_targets = [float(dt0), float(dt0)/2.0, float(dt0)/4.0]
+
+    cases = [_clone_case_with_dt_consistent(base_case, dt_t) for dt_t in dt_targets]
+
+    # Rodar só UMA vez cada (e usar as trajetórias destas execuções)
+    trajs: List[Any] = []
+    runs: List[Dict[str, Any]] = []
+    dts_eff: List[float] = []
+
+    for i, c in enumerate(cases):
+        dt_eff, ns_eff = _get_solver_dt_nsteps(c)
+        dts_eff.append(float(dt_eff))
+        c["name"] = f"{base_name}__conv{i}_dt{dt_eff:.3e}"
+
+        # valida invariantes/status (continua útil)
+        r = _validate_newton(c, plotdir=None)
+        runs.append(r)
+
+        tr = _unwrap_traj(simulate_case(c, "newton"))
+        trajs.append(tr)
+
+    tr0, tr1, tr2 = trajs  # dt, dt/2, dt/4
+
+    conv_span = (base_case.get("criteria", {}) or {}).get("convergence_span", None)
+    if conv_span is not None:
+        c["span"] = [float(conv_span[0]), float(conv_span[1])]
+
+    # Erro robusto: max ao longo do tempo (subamostragem exata)
+    try:
+        e_dt = _traj_max_diff_coarse_vs_fine(tr0, tr1, stride=2)
+        e_dt2 = _traj_max_diff_coarse_vs_fine(tr1, tr2, stride=2)
+        p_obs = _estimate_order_from_three(e_dt, e_dt2)
+        ratio = (e_dt / e_dt2) if (e_dt2 is not None and e_dt2 > 0.0) else None
+    except Exception as ex:
+        return {
+            "name": base_name,
+            "passed": False,
+            "inconclusive": True,
+            "reason": f"trajectory alignment failed: {ex}",
+            "dt_targets": dt_targets,
+            "dt_effective": dts_eff,
+            "e_dt": None,
+            "e_dt2": None,
+            "ratio_e": None,
+            "p_obs": None,
+            "abs_err_proxy": None,
+            "rel_err_proxy": None,
+            "criteria": {
+                "convergence_min_order": min_order,
+                "convergence_abs_err_max": abs_err_max,
+                "convergence_rel_err_max": rel_err_max,
+            },
+            "runs": [
+                {
+                    "dt": r.get("dt"),
+                    "n_steps": r.get("n_steps"),
+                    "energy_rel_drift": r.get("energy_rel_drift"),
+                    "h_rel_drift": r.get("h_rel_drift"),
+                    "status": r.get("status"),
+                    "passed_invariants": r.get("passed"),
+                    "msg": _short_msg(str(r.get("message", ""))),
+                }
+                for r in runs
+            ],
+        }
+
+    # Proxy do erro: diferença entre dt/2 e dt/4 (max over time)
+    abs_err_proxy = float(e_dt2)
+
+    # escala p/ erro relativo (usa o refinado)
+    y2 = np.array(tr2.y, dtype=float)
+    scale = max(1.0, float(np.max(np.linalg.norm(y2, axis=1))))
+    rel_err_proxy = float(abs_err_proxy / scale)
+
+    # Piso de roundoff: se já saturou, NÃO dá pra exigir ordem
+    floor2 = _roundoff_floor_estimate(tr2)
+    saturated = bool(abs_err_proxy <= 5.0 * floor2)
+
+    ok_monotone = bool(e_dt2 < e_dt)
+    ok_abs = bool(abs_err_proxy <= abs_err_max)
+    ok_rel = bool(rel_err_proxy <= rel_err_max)
+    ok_order = bool((p_obs is not None) and (p_obs >= min_order))
+
+    # Regra final (rígida e justa):
+    # passou se erros são pequenos E (ordem alta OU saturado)
+    passed = bool(ok_monotone and ok_abs and ok_rel and (ok_order or saturated))
+
+    reason_parts = []
+    if not ok_monotone:
+        reason_parts.append("error not decreasing")
+    if not ok_abs:
+        reason_parts.append(f"abs_err_proxy>{abs_err_max:.1e}")
+    if not ok_rel:
+        reason_parts.append(f"rel_err_proxy>{rel_err_max:.1e}")
+    if not ok_order and not saturated:
+        reason_parts.append(f"p_obs<{min_order:.2f}")
+    if saturated and not ok_order:
+        reason_parts.append("SATURATED(roundoff floor)")
+
+    reason = "; ".join(reason_parts) if reason_parts else ""
+
+    # Plots (se quiser)
+    if plotdir is not None:
+        os.makedirs(plotdir, exist_ok=True)
+        # loglog (usa apenas dt e dt/2 vs referência dt/4)
+        try:
+            err0 = _traj_max_diff_coarse_vs_fine(tr0, tr2, stride=4)
+            err1 = _traj_max_diff_coarse_vs_fine(tr1, tr2, stride=2)
+            dts_plot = [dts_eff[0], dts_eff[1]]
+            errs_plot = [err0, err1]
+            _plot_convergence_newton(base_name, dts_plot, errs_plot, plotdir, p_obs)
+
+            labels = [f"dt={dts_eff[0]:.3e}", f"dt={dts_eff[1]:.3e}", f"dt={dts_eff[2]:.3e}"]
+            _plot_convergence_overlay_newton(base_name, trajs, labels, plotdir)
+        except Exception:
+            pass
+
+    return {
+        "name": base_name,
+        "passed": bool(passed),
+        "inconclusive": False,
+        "reason": reason,
+        "dt_targets": dt_targets,
+        "dt_effective": dts_eff,
+        "e_dt": float(e_dt),
+        "e_dt2": float(e_dt2),
+        "ratio_e": float(ratio) if ratio is not None else None,
+        "p_obs": float(p_obs) if p_obs is not None else None,
+        "abs_err_proxy": float(abs_err_proxy),
+        "rel_err_proxy": float(rel_err_proxy),
+        "roundoff_floor_est": float(floor2),
+        "saturated": bool(saturated),
+        "criteria": {
+            "convergence_min_order": min_order,
+            "convergence_abs_err_max": abs_err_max,
+            "convergence_rel_err_max": rel_err_max,
+        },
+        "runs": [
+            {
+                "dt": r.get("dt"),
+                "n_steps": r.get("n_steps"),
+                "energy_rel_drift": r.get("energy_rel_drift"),
+                "h_rel_drift": r.get("h_rel_drift"),
+                "status": r.get("status"),
+                "passed_invariants": r.get("passed"),
+                "msg": _short_msg(str(r.get("message", ""))),
+            }
+            for r in runs
+        ],
+    }
+
+# ============================================================
+# Convergência automática (Schwarzschild) — checks existentes + (opcional) ordem em epsilon
 # ============================================================
 
 def _schw_signature(case: Dict[str, Any]) -> str:
@@ -799,6 +1108,19 @@ def main() -> None:
     ap.add_argument("--cases", default=os.path.join(os.path.dirname(__file__), "cases.yaml"))
     ap.add_argument("--plots", action="store_true", help="Generate plots in <out>/plots")
     ap.add_argument("--out", default="out", help="Output directory")
+
+    # Convergência automática (Newton)
+    ap.add_argument(
+        "--convergence",
+        action="store_true",
+        help="Run automatic dt refinement (dt, dt/2, dt/4) for Newton cases and estimate observed order.",
+    )
+    ap.add_argument(
+        "--conv-rigorous",
+        action="store_true",
+        help="Use stricter defaults for convergence criteria (can be overridden per-case in YAML criteria.*).",
+    )
+
     args = ap.parse_args()
 
     print(engine_hello())
@@ -806,7 +1128,7 @@ def main() -> None:
     cfg = load_cases_yaml(args.cases)
     outdir = args.out
     plotdir = os.path.join(outdir, "plots")
-    if args.plots:
+    if args.plots or args.convergence:
         os.makedirs(plotdir, exist_ok=True)
 
     report: Dict[str, Any] = {"suites": []}
@@ -837,12 +1159,56 @@ def main() -> None:
         ])
     _print_table(n_rows, headers=["ok", "case", "dt", "dE_rel", "dh_rel", "status", "theory"])
 
-    report["suites"].append({
+    newton_suite_block: Dict[str, Any] = {
         "suite": "newton",
         "ok": ok_newton,
         "n_cases": len(newton_cases),
-        "results": newton_results
-    })
+        "results": newton_results,
+    }
+
+    # Convergência Newton (dt varrido) — só se pedido
+    conv_reports: List[Dict[str, Any]] = []
+    conv_ok = True
+    if args.convergence:
+        for c in newton_cases:
+            cr = _run_convergence_newton_one_case(
+                c,
+                plotdir if (args.plots or args.convergence) else None,
+                rigorous=bool(args.conv_rigorous),
+            )
+            conv_reports.append(cr)
+            conv_ok = conv_ok and bool(cr.get("passed", False))
+
+        _print_header(f"Newton convergence: ok={conv_ok} groups={len(conv_reports)}")
+
+        c_rows: List[List[str]] = []
+        for g in conv_reports:
+            tag = "PASS" if g["passed"] else ("INCONCLUSIVE" if g.get("inconclusive") else "FAIL")
+            dts = g.get("dt_effective", [])
+            dts_str = ", ".join([f"{float(dt):.2e}" for dt in dts]) if dts else "-"
+            c_rows.append([
+                tag,
+                g["name"],
+                dts_str,
+                _fmt_e(g.get("e_dt"), width=12),
+                _fmt_e(g.get("e_dt2"), width=12),
+                _fmt_f(g.get("p_obs"), width=8, prec=3),
+                _fmt_e(g.get("abs_err_proxy"), width=12),
+                _fmt_e(g.get("rel_err_proxy"), width=12),
+                _short_msg(str(g.get("reason", ""))),
+            ])
+        _print_table(
+            c_rows,
+            headers=["ok", "case", "dt_eff (dt,dt/2,dt/4)", "e_dt", "e_dt2", "p_obs", "abs_err", "rel_err", "reason"],
+        )
+
+        newton_suite_block["ok_convergence"] = bool(conv_ok)
+        newton_suite_block["convergence"] = conv_reports
+
+        # Se convergência falhar, o suite newton total vira falso (critério mais rigoroso)
+        newton_suite_block["ok_total"] = bool(ok_newton and conv_ok)
+
+    report["suites"].append(newton_suite_block)
 
     # ----------------------------
     # Schwarzschild
@@ -858,16 +1224,16 @@ def main() -> None:
         ok_schw_cases = ok_schw_cases and rr["passed"]
 
     conv = _check_convergence_schw(schw_results, abs_tol=1e-9, rel_tol=0.25)
-    conv_ok = all(bool(x["passed"]) for x in conv) if conv else False
+    conv_ok_s = all(bool(x["passed"]) for x in conv) if conv else False
 
     events_conv = _check_convergence_events_schw(schw_results, abs_tol_factor=2.0, rel_tol=0.0)
     events_conv_ok = all(bool(x["passed"]) for x in events_conv) if events_conv else False
 
-    ok_schw_total = bool(ok_schw_cases and conv_ok and events_conv_ok)
+    ok_schw_total = bool(ok_schw_cases and conv_ok_s and events_conv_ok)
 
     _print_header(
         f"Schwarzschild suite: ok={ok_schw_total} "
-        f"(cases_ok={ok_schw_cases}, conv_ok={conv_ok}, events_conv_ok={events_conv_ok}) cases={len(schw_cases)}"
+        f"(cases_ok={ok_schw_cases}, conv_ok={conv_ok_s}, events_conv_ok={events_conv_ok}) cases={len(schw_cases)}"
     )
 
     s_rows: List[List[str]] = []
@@ -903,13 +1269,13 @@ def main() -> None:
     if not conv:
         print("No comparable groups found. Need >=2 cases with same physics and different dt.")
     else:
-        c_rows: List[List[str]] = []
+        c_rows2: List[List[str]] = []
         for g in conv:
             tag = "PASS" if g["passed"] else ("INCONCLUSIVE" if g.get("inconclusive") else "FAIL")
             dts = ", ".join([f"{dt:.2e}" for dt in g["dts"]])
             nus = ", ".join(["None" if v is None else f"{float(v):.3e}" for v in g["norm_u_abs_max"]])
-            c_rows.append([tag, dts, nus, ", ".join(g["cases"])])
-        _print_table(c_rows, headers=["ok", "dt (big->small)", "norm_u_abs_max", "cases"])
+            c_rows2.append([tag, dts, nus, ", ".join(g["cases"])])
+        _print_table(c_rows2, headers=["ok", "dt (big->small)", "norm_u_abs_max", "cases"])
 
         for g in conv:
             if g.get("violations"):
@@ -951,7 +1317,7 @@ def main() -> None:
         "suite": "schwarzschild",
         "ok": ok_schw_total,
         "ok_cases": ok_schw_cases,
-        "ok_convergence": conv_ok,
+        "ok_convergence": conv_ok_s,
         "ok_events_convergence": events_conv_ok,
         "n_cases": len(schw_cases),
         "results": schw_results,
@@ -963,7 +1329,7 @@ def main() -> None:
     with open(os.path.join(outdir, "report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
-    if args.plots:
+    if args.plots or args.convergence:
         print(f"\nPlots em: {plotdir}")
     print(f"Relatório em: {os.path.join(outdir, 'report.json')}")
 

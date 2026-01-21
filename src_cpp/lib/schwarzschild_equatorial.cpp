@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <sstream>
 
 namespace relorbit {
@@ -33,17 +32,12 @@ static inline void rhs_schw_eq(
     double r, double /*phi*/, double /*tcoord*/, double pr,
     double& dr, double& dphi, double& dt, double& dpr
 ) {
-    // dr/dtau = pr
     dr = pr;
-
-    // dphi/dtau = L/r^2
     dphi = L / (r * r);
 
-    // dt/dtau = E / (1 - 2M/r)
     const double A = safe_A(M, r);
     dt = E / A;
 
-    // dpr/dtau = -(1/2) dVeff/dr
     dpr = -0.5 * dVeff_dr_schw(M, r, L);
 }
 
@@ -86,7 +80,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     traj.r0 = r0;
     traj.phi0 = phi0;
 
-    // default de sucesso: se nada quebrar, é "BOUND" (run saudável)
+    // default saudável: se nada quebrar e não houver captura, mantém BOUND
     traj.status = OrbitStatus::BOUND;
     traj.message.clear();
 
@@ -107,9 +101,12 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         return traj;
     }
 
-    // regras de thresholds
-    const double r_cap = capture_r * M;                  // parada operacional
-    const double r_hor = (2.0 * M) * (1.0 + capture_eps); // evento físico + limite coordenado
+    // r_cap: marcador operacional (NÃO define CAPTURE). Pode ser útil pra log/depuração.
+    const double r_cap = capture_r * M;
+
+    // r_hor: evento físico + limite coordenado (Schwarzschild explode em A->0).
+    // aqui CAPTURE = cruzou o horizonte (com margem eps)
+    const double r_hor = (2.0 * M) * (1.0 + capture_eps);
 
     // passos
     int n_steps = cfg.n_steps;
@@ -133,7 +130,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double tau = tau0;
     double r = r0;
     double phi = phi0;
-    double tcoord = 0.0; // offset irrelevante
+    double tcoord = 0.0;
     double pr = pr0;
 
     auto append_sample = [&](double tau_s, double r_s, double phi_s, double t_s, double pr_s) {
@@ -164,6 +161,8 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
 
     append_sample(tau, r, phi, tcoord, pr);
 
+    bool rcap_logged = false;
+
     // integração
     for (int step = 0; step < n_steps; ++step) {
         double h = dt0;
@@ -181,34 +180,34 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         double k1_r, k1_phi, k1_t, k1_pr;
         rhs_schw_eq(M, E, L, r, phi, tcoord, pr, k1_r, k1_phi, k1_t, k1_pr);
 
-        double r2 = r + 0.5 * h * k1_r;
-        double p2 = phi + 0.5 * h * k1_phi;
-        double t2 = tcoord + 0.5 * h * k1_t;
-        double pr2 = pr + 0.5 * h * k1_pr;
+        const double r2  = r      + 0.5 * h * k1_r;
+        const double p2  = phi    + 0.5 * h * k1_phi;
+        const double t2  = tcoord + 0.5 * h * k1_t;
+        const double pr2 = pr     + 0.5 * h * k1_pr;
 
         double k2_r, k2_phi, k2_t, k2_pr;
         rhs_schw_eq(M, E, L, r2, p2, t2, pr2, k2_r, k2_phi, k2_t, k2_pr);
 
-        double r3 = r + 0.5 * h * k2_r;
-        double p3 = phi + 0.5 * h * k2_phi;
-        double t3 = tcoord + 0.5 * h * k2_t;
-        double pr3 = pr + 0.5 * h * k2_pr;
+        const double r3  = r      + 0.5 * h * k2_r;
+        const double p3  = phi    + 0.5 * h * k2_phi;
+        const double t3  = tcoord + 0.5 * h * k2_t;
+        const double pr3 = pr     + 0.5 * h * k2_pr;
 
         double k3_r, k3_phi, k3_t, k3_pr;
         rhs_schw_eq(M, E, L, r3, p3, t3, pr3, k3_r, k3_phi, k3_t, k3_pr);
 
-        double r4 = r + h * k3_r;
-        double p4 = phi + h * k3_phi;
-        double t4 = tcoord + h * k3_t;
-        double pr4 = pr + h * k3_pr;
+        const double r4  = r      + h * k3_r;
+        const double p4  = phi    + h * k3_phi;
+        const double t4  = tcoord + h * k3_t;
+        const double pr4 = pr     + h * k3_pr;
 
         double k4_r, k4_phi, k4_t, k4_pr;
         rhs_schw_eq(M, E, L, r4, p4, t4, pr4, k4_r, k4_phi, k4_t, k4_pr);
 
-        const double r_next   = r + (h / 6.0) * (k1_r   + 2.0 * k2_r   + 2.0 * k3_r   + k4_r);
-        const double phi_next = phi + (h / 6.0) * (k1_phi + 2.0 * k2_phi + 2.0 * k3_phi + k4_phi);
+        const double r_next   = r      + (h / 6.0) * (k1_r   + 2.0 * k2_r   + 2.0 * k3_r   + k4_r);
+        const double phi_next = phi    + (h / 6.0) * (k1_phi + 2.0 * k2_phi + 2.0 * k3_phi + k4_phi);
         const double t_next   = tcoord + (h / 6.0) * (k1_t   + 2.0 * k2_t   + 2.0 * k3_t   + k4_t);
-        const double pr_next  = pr + (h / 6.0) * (k1_pr  + 2.0 * k2_pr  + 2.0 * k3_pr  + k4_pr);
+        const double pr_next  = pr     + (h / 6.0) * (k1_pr  + 2.0 * k2_pr  + 2.0 * k3_pr  + k4_pr);
         const double tau_next = tau + h;
 
         if (!is_finite(r_next) || !is_finite(phi_next) || !is_finite(t_next) || !is_finite(pr_next)) {
@@ -239,7 +238,22 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         }
 
         // -----------------------------------------
-        // EVENTO: horizon crossing (r cruza 2M*(1+eps))
+        // EVENTO: crossing de r_cap (marcador operacional; NÃO encerra)
+        // -----------------------------------------
+        if (!rcap_logged) {
+            double alpha = 0.0;
+            if (crossing_r(r_prev, r_next, r_cap, alpha)) {
+                const double tau_ev = tau_prev + alpha * h;
+                const double phi_ev = lerp(phi_prev, phi_next, alpha);
+                const double t_ev   = lerp(t_prev,   t_next,   alpha);
+                const double pr_ev  = lerp(pr_prev,  pr_next,  alpha);
+                push_event(traj, "r_cap", tau_ev, t_ev, r_cap, phi_ev, pr_ev);
+                rcap_logged = true;
+            }
+        }
+
+        // -----------------------------------------
+        // EVENTO: horizon crossing (CAPTURE físico)
         // -----------------------------------------
         {
             double alpha = 0.0;
@@ -249,10 +263,9 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
                 const double t_ev   = lerp(t_prev,   t_next,   alpha);
                 const double pr_ev  = lerp(pr_prev,  pr_next,  alpha);
 
-                // registra evento físico
+                // registra evento físico e encerra
                 push_event(traj, "horizon", tau_ev, t_ev, r_hor, phi_ev, pr_ev);
 
-                // encerra: abaixo disso dt/dtau explode em coordenadas de Schwarzschild
                 tau = tau_ev;
                 r = r_hor;
                 phi = phi_ev;
@@ -263,42 +276,6 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
 
                 traj.status = OrbitStatus::CAPTURE;
                 traj.message = "horizon crossed (r <= 2M*(1+eps))";
-                break;
-            }
-        }
-
-        // -----------------------------------------
-        // EVENTO: capture crossing (r cruza r_cap)
-        // -----------------------------------------
-        {
-            double alpha = 0.0;
-            if (crossing_r(r_prev, r_next, r_cap, alpha)) {
-                const double tau_ev = tau_prev + alpha * h;
-                const double phi_ev = lerp(phi_prev, phi_next, alpha);
-                const double t_ev   = lerp(t_prev,   t_next,   alpha);
-                const double pr_ev  = lerp(pr_prev,  pr_next,  alpha);
-
-                tau = tau_ev;
-                r = r_cap;
-                phi = phi_ev;
-                tcoord = t_ev;
-                pr = pr_ev;
-
-                append_sample(tau, r, phi, tcoord, pr);
-                push_event(traj, "capture", tau, tcoord, r, phi, pr);
-
-                traj.status = OrbitStatus::CAPTURE;
-
-                std::ostringstream oss;
-                oss.setf(std::ios::scientific);
-                oss << "capture: r crossed capture radius "
-                    << "(r_prev=" << r_prev
-                    << ", r_now=" << r_next
-                    << ", r_cap=" << r_cap
-                    << ", capture_r=" << capture_r
-                    << ", M=" << M << ")";
-                traj.message = oss.str();
-
                 break;
             }
         }
@@ -361,7 +338,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
 
             // g_tt=-A, g_rr=1/A, g_phiphi=r^2 (assinatura - + + +)
             const double g_uu = (-A) * (ut * ut) + (1.0 / A) * (ur * ur) + (rr * rr) * (up * up);
-            traj.norm_u[i] = g_uu + 1.0; // deve ser ~0
+            traj.norm_u[i] = g_uu + 1.0;
         }
     }
 

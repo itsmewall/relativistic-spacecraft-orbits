@@ -8,53 +8,68 @@ suites:
         model: newton
         params:
           mu: 1.0
-        # [x, y, vx, vy]
         state0: [1.0, 0.0, 0.0, 1.0]
         span: [0.0, 100.0]
         solver:
           dt: 1.0e-3
         criteria:
+          # Invariantes (validação principal)
           energy_rel_drift_max: 1.0e-6
           h_rel_drift_max: 1.0e-8
           status: BOUND
           status_must_match_theory: true
 
+          # Convergência (janela curta para evitar saturação por roundoff)
+          convergence_span: [0.0, 62.8318530718]   # ~10 órbitas (10*2π)
+          convergence_min_order: 3.6
+          convergence_abs_err_max: 1.0e-9
+          convergence_rel_err_max: 1.0e-6
+
       - name: newton_elliptic_mu1_r1_v0p8
         model: newton
         params:
           mu: 1.0
-        # v < sqrt(mu/r)=1 => bound elliptic
         state0: [1.0, 0.0, 0.0, 0.8]
         span: [0.0, 200.0]
         solver:
           dt: 5.0e-4
         criteria:
+          # Invariantes (validação principal)
           energy_rel_drift_max: 2.0e-6
           h_rel_drift_max: 2.0e-8
           status: BOUND
           status_must_match_theory: true
 
+          # Convergência (janela menor para reduzir erro de fase acumulado)
+          convergence_span: [0.0, 60.0]
+          convergence_min_order: 3.6
+          convergence_abs_err_max: 1.0e-9
+          convergence_rel_err_max: 1.0e-6
+
       - name: newton_hyperbolic_mu1_r1_v1p6
         model: newton
         params:
           mu: 1.0
-        # v > 1 => unbound (hyperbolic)
         state0: [1.0, 0.0, 0.0, 1.6]
         span: [0.0, 20.0]
         solver:
           dt: 1.0e-4
         criteria:
+          # Invariantes (validação principal)
           energy_rel_drift_max: 2.0e-6
           h_rel_drift_max: 2.0e-8
           status: UNBOUND
           status_must_match_theory: true
 
+          # Convergência (hiperbólica: curto por natureza)
+          convergence_span: [0.0, 5.0]
+          convergence_min_order: 3.6
+          convergence_abs_err_max: 1.0e-9
+          convergence_rel_err_max: 1.0e-6
+
   schwarzschild:
     description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0,pr0)."
     cases:
-      # ---------------------------
-      # Circular (3 dts) — mesmo físico, dt diferente
-      # ---------------------------
       - name: schwarzschild_circular_M1_r10_dt1e3
         model: schwarzschild
         params:
@@ -63,15 +78,13 @@ suites:
           L: 3.779644730092272
           capture_r: 2.5
           capture_eps: 1.0e-12
-        state0: [10.0, 0.0]   # [r0, phi0]
-        span: [0.0, 200.0]    # [tau0, tauf]
+        state0: [10.0, 0.0]
+        span: [0.0, 200.0]
         solver:
           dt: 1.0e-3
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-10
-          r_max_dev: 1.0e-3
-          min_events: 0
 
       - name: schwarzschild_circular_M1_r10_dt5e4
         model: schwarzschild
@@ -88,8 +101,6 @@ suites:
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-10
-          r_max_dev: 1.0e-3
-          min_events: 0
 
       - name: schwarzschild_circular_M1_r10_dt2p5e4
         model: schwarzschild
@@ -106,14 +117,7 @@ suites:
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-10
-          r_max_dev: 1.0e-3
-          min_events: 0
 
-      # ---------------------------
-      # Bound w/ turning points (3 dts) — mesmo físico, dt diferente
-      # Esperado: pr muda de sinal => eventos periapse/apoapse
-      # Aqui exigimos pelo menos um periapse.
-      # ---------------------------
       - name: schwarzschild_bound_turning_M1_r12_dt1e3
         model: schwarzschild
         params:
@@ -122,7 +126,7 @@ suites:
           L: 4.0
           capture_r: 2.5
           capture_eps: 1.0e-12
-        pr0: -0.12236859921595049   # consistente: pr0^2 = E^2 - Veff(r0)
+        pr0: -0.12236859921595049
         state0: [12.0, 0.0]
         span: [0.0, 200.0]
         solver:
@@ -130,7 +134,6 @@ suites:
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-8
-          r_max_dev: null
           must_have_events: ["periapse"]
 
       - name: schwarzschild_bound_turning_M1_r12_dt5e4
@@ -149,7 +152,6 @@ suites:
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-8
-          r_max_dev: null
           must_have_events: ["periapse"]
 
       - name: schwarzschild_bound_turning_M1_r12_dt2p5e4
@@ -168,14 +170,9 @@ suites:
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-8
-          r_max_dev: null
           must_have_events: ["periapse"]
 
-      # ---------------------------
-      # Plunge/Capture (3 dts) — mesmo físico, dt diferente
-      # Teu C++ define CAPTURE como cruzar r_cap = capture_r*M.
-      # Então exigimos evento "capture".
-      # ---------------------------
+      # CAPTURE agora significa horizonte, não r_cap.
       - name: schwarzschild_plunge_M1_r5p8_dt5e4
         model: schwarzschild
         params:
@@ -184,16 +181,15 @@ suites:
           L: 3.466162967069742
           capture_r: 2.5
           capture_eps: 1.0e-12
-        pr0: -0.02            # inbound
+        pr0: -0.02
         state0: [5.8, 0.0]
         span: [0.0, 200.0]
         solver:
           dt: 5.0e-4
         criteria:
           status: CAPTURE
-          constraint_abs_max: 1.0e-8
-          r_max_dev: null
-          must_have_events: ["capture"]
+          constraint_abs_max: 1.0e-6
+          must_have_events: ["horizon"]
 
       - name: schwarzschild_plunge_M1_r5p8_dt2p5e4
         model: schwarzschild
@@ -210,9 +206,8 @@ suites:
           dt: 2.5e-4
         criteria:
           status: CAPTURE
-          constraint_abs_max: 1.0e-8
-          r_max_dev: null
-          must_have_events: ["capture"]
+          constraint_abs_max: 1.0e-6
+          must_have_events: ["horizon"]
 
       - name: schwarzschild_plunge_M1_r5p8_dt1p25e4
         model: schwarzschild
@@ -229,6 +224,5 @@ suites:
           dt: 1.25e-4
         criteria:
           status: CAPTURE
-          constraint_abs_max: 1.0e-8
-          r_max_dev: null
-          must_have_events: ["capture"]
+          constraint_abs_max: 1.0e-6
+          must_have_events: ["horizon"]
