@@ -129,6 +129,29 @@ def _short_msg(msg: str, maxlen: int = 76) -> str:
     return msg[: maxlen - 3] + "..."
 
 
+def _status_endswith(status_str: str, expected_tail: str) -> bool:
+    # status_str costuma vir como "OrbitStatus.BOUND"
+    # expected_tail pode vir como "BOUND"
+    return str(status_str).endswith(str(expected_tail))
+
+
+# ============================================================
+# Newton: teoria de bound/unbound
+# ============================================================
+
+def _energy_specific_newton(mu: float, state: List[float]) -> float:
+    x, y, vx, vy = [float(v) for v in state]
+    r = float(np.sqrt(x * x + y * y))
+    v2 = float(vx * vx + vy * vy)
+    return 0.5 * v2 - float(mu) / r
+
+
+def _newton_status_theory(mu: float, state0: List[float]) -> str:
+    e0 = _energy_specific_newton(mu, state0)
+    # convenção: e<0 bound, e>=0 unbound
+    return "BOUND" if e0 < 0.0 else "UNBOUND"
+
+
 # ============================================================
 # Eventos (Schwarzschild)
 # ============================================================
@@ -158,7 +181,6 @@ def _extract_events(traj: Any) -> List[Dict[str, Any]]:
             "i": int(i),
         })
 
-    # Ordena por tau (defensivo)
     events.sort(key=lambda e: float(e.get("tau", 0.0)))
     return events
 
@@ -179,6 +201,43 @@ def _events_to_kind_map(events: List[Dict[str, Any]]) -> Dict[str, List[float]]:
     for e in events:
         mp[str(e.get("kind", ""))].append(float(e.get("tau", 0.0)))
     return mp
+
+
+def _check_event_criteria(events: List[Dict[str, Any]], crit: Dict[str, Any]) -> Tuple[bool, str]:
+    """
+    Critérios opcionais:
+      - min_events: int
+      - must_have_events: ["capture","periapse",...]
+      - must_not_have_events: ["horizon",...]
+    """
+    kinds = [str(e.get("kind", "")) for e in events]
+    kinds_set = set(kinds)
+
+    min_events = int(crit.get("min_events", 0) or 0)
+    if min_events > 0 and len(events) < min_events:
+        return False, f"events: expected >= {min_events}, got {len(events)}"
+
+    must_have = crit.get("must_have_events", None)
+    if must_have is not None:
+        if isinstance(must_have, str):
+            must_have_list = [must_have]
+        else:
+            must_have_list = list(must_have)
+        missing = [k for k in must_have_list if str(k) not in kinds_set]
+        if missing:
+            return False, f"events: missing required kinds {missing}"
+
+    must_not = crit.get("must_not_have_events", None)
+    if must_not is not None:
+        if isinstance(must_not, str):
+            must_not_list = [must_not]
+        else:
+            must_not_list = list(must_not)
+        present = [k for k in must_not_list if str(k) in kinds_set]
+        if present:
+            return False, f"events: forbidden kinds present {present}"
+
+    return True, ""
 
 
 # ============================================================
@@ -306,30 +365,68 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
     dE_max = float(crit.get("energy_rel_drift_max", 2e-6))
     dh_max = float(crit.get("h_rel_drift_max", 2e-8))
 
-    passed = (dE <= dE_max) and (dh <= dh_max)
-
     dt, n_steps = _get_solver_dt_nsteps(case)
     t0, tf = _get_span(case)
     params = case.get("params", {}) or {}
     mu = float(params.get("mu", case.get("mu", 1.0)))
 
+    # teoria (por energia inicial do state0)
+    state0 = case.get("state0", None)
+    energy0 = None
+    theory_status = None
+    if state0 is not None:
+        try:
+            energy0 = float(_energy_specific_newton(mu, list(state0)))
+            theory_status = str(_newton_status_theory(mu, list(state0)))
+        except Exception:
+            energy0 = None
+            theory_status = None
+
+    # Checagem opcional de status
+    status_str = str(getattr(traj, "status", ""))
+    expected_status = crit.get("status", None)  # se não existir, não exige
+    status_ok = True
+    status_reason = ""
+    if expected_status is not None:
+        status_ok = _status_endswith(status_str, str(expected_status))
+        if not status_ok:
+            status_reason = f"status mismatch (got={status_str}, expected=*{expected_status})"
+        # também pode exigir que bata com teoria (se theory_status disponível)
+        if crit.get("status_must_match_theory", False) and theory_status is not None:
+            if not _status_endswith(status_str, theory_status):
+                status_ok = False
+                status_reason = f"status != theory (got={status_str}, theory=*{theory_status})"
+
+    passed = (dE <= dE_max) and (dh <= dh_max) and status_ok
+
     if plotdir is not None:
         _plot_newton(case["name"], traj, plotdir)
+
+    msg = getattr(traj, "message", "") or ""
+    if (not passed) and status_reason:
+        msg = (msg + " | " + status_reason).strip(" |")
 
     return {
         "name": case["name"],
         "passed": bool(passed),
-        "status": str(getattr(traj, "status", "")),
-        "message": getattr(traj, "message", ""),
+        "status": status_str,
+        "message": msg,
         "model": "newton",
         "mu": mu,
         "t0": t0,
         "tf": tf,
         "dt": dt,
         "n_steps": int(n_steps),
+        "energy0": energy0,
+        "status_theory": theory_status,
         "energy_rel_drift": float(dE),
         "h_rel_drift": float(dh),
-        "criteria": {"energy_rel_drift_max": dE_max, "h_rel_drift_max": dh_max},
+        "criteria": {
+            "energy_rel_drift_max": dE_max,
+            "h_rel_drift_max": dh_max,
+            "status": expected_status,
+            "status_must_match_theory": bool(crit.get("status_must_match_theory", False)),
+        },
     }
 
 
@@ -361,9 +458,18 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     expected_status = str(crit.get("status", "BOUND"))
 
     status_str = str(getattr(traj, "status", ""))
-    status_ok = status_str.endswith(expected_status)
+    status_ok = _status_endswith(status_str, expected_status)
 
-    passed = (eps_max is not None and eps_max <= eps_max_allowed) and status_ok
+    events = _extract_events(traj)
+    events_compact = _events_compact_str(events)
+
+    events_ok, events_reason = _check_event_criteria(events, crit)
+
+    passed = (
+        (eps_max is not None and eps_max <= eps_max_allowed)
+        and status_ok
+        and events_ok
+    )
 
     dt, n_steps = _get_solver_dt_nsteps(case)
     tau0, tauf = _get_span(case)
@@ -373,16 +479,19 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     Epar = float(params.get("E", case.get("E")))
     Lpar = float(params.get("L", case.get("L")))
     pr0 = _case_pr0(case)
-    events = _extract_events(traj)
 
     if plotdir is not None:
         _plot_schw(case["name"], traj, plotdir)
+
+    msg = getattr(traj, "message", "") or ""
+    if (not passed) and (not events_ok) and events_reason:
+        msg = (msg + " | " + events_reason).strip(" |")
 
     return {
         "name": case["name"],
         "passed": bool(passed),
         "status": status_str,
-        "message": getattr(traj, "message", ""),
+        "message": msg,
         "model": "schwarzschild",
         "M": M,
         "E": Epar,
@@ -397,9 +506,13 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "constraint_abs_max": float(eps_max) if eps_max is not None else None,
         "norm_u_abs_max": norm_u_max,
         "events": events,
+        "events_compact": events_compact,
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
+            "min_events": int(crit.get("min_events", 0) or 0),
+            "must_have_events": crit.get("must_have_events", None),
+            "must_not_have_events": crit.get("must_not_have_events", None),
         },
     }
 
@@ -433,11 +546,6 @@ def _schw_signature(case: Dict[str, Any]) -> str:
 
 
 def _conv_allows_increase(nu_big: float, nu_small: float, abs_tol: float, rel_tol: float) -> bool:
-    """
-    Critério robusto:
-      passa se nu_small <= nu_big + abs_tol + rel_tol*nu_big
-    Isso evita reprovar quando nu já está ~1e-11 e oscila por ruído/roundoff.
-    """
     return nu_small <= (nu_big + abs_tol + rel_tol * max(nu_big, 0.0))
 
 
@@ -446,10 +554,6 @@ def _check_convergence_schw(
     abs_tol: float = 1e-9,
     rel_tol: float = 0.25,
 ) -> List[Dict[str, Any]]:
-    """
-    Convergência monotônica com tolerância:
-      para dt menor, norm_u_abs_max não deve aumentar "de forma significativa".
-    """
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for r in results:
         key = r.get("_sig", None)
@@ -521,18 +625,6 @@ def _check_convergence_events_schw(
     abs_tol_factor: float = 2.0,
     rel_tol: float = 0.0,
 ) -> List[Dict[str, Any]]:
-    """
-    Convergência dos instantes de eventos quando dt diminui.
-
-    Critério local (par a par, dt_big -> dt_small):
-      |tau_small - tau_big| <= abs_tol_factor*dt_small + rel_tol*max(|tau_big|,1)
-
-    Matching: por 'kind' e índice de ocorrência dentro de cada kind.
-
-    Regra adicional (crítica):
-      - Se um grupo não produz eventos em nenhuma execução, isso é N/A e NÃO deve reprovar.
-      - Se um grupo produz eventos em algumas execuções e em outras não, isso é FAIL (inconsistente).
-    """
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for r in results:
         key = r.get("_sig", None)
@@ -570,7 +662,6 @@ def _check_convergence_events_schw(
         has_any = any(c > 0 for c in counts)
         has_all = all(c > 0 for c in counts)
 
-        # Caso 1: nenhum evento em nenhuma run -> N/A (passa, mas marca skipped)
         if not has_any:
             conv_reports.append({
                 "passed": True,
@@ -586,7 +677,6 @@ def _check_convergence_events_schw(
             })
             continue
 
-        # Caso 2: alguns têm eventos e outros não -> FAIL (inconsistente)
         if has_any and not has_all:
             conv_reports.append({
                 "passed": False,
@@ -603,7 +693,6 @@ def _check_convergence_events_schw(
             })
             continue
 
-        # Caso 3: todas têm eventos -> faz comparação
         ok = True
         violations: List[Dict[str, Any]] = []
         mismatches: List[Dict[str, Any]] = []
@@ -743,8 +832,10 @@ def main() -> None:
             f"{r['dt']:.1e}",
             _fmt_e(r["energy_rel_drift"], width=12),
             _fmt_e(r["h_rel_drift"], width=12),
+            str(r.get("status", "")),
+            str(r.get("status_theory", "")) if r.get("status_theory") else "",
         ])
-    _print_table(n_rows, headers=["ok", "case", "dt", "dE_rel", "dh_rel"])
+    _print_table(n_rows, headers=["ok", "case", "dt", "dE_rel", "dh_rel", "status", "theory"])
 
     report["suites"].append({
         "suite": "newton",
@@ -790,11 +881,12 @@ def main() -> None:
             _fmt_e(r.get("constraint_abs_max"), width=12),
             _fmt_e(r.get("norm_u_abs_max"), width=12),
             str(r.get("status", "")),
+            r.get("events_compact", "") or "",
             _short_msg(str(r.get("message", ""))),
         ])
     _print_table(
         s_rows,
-        headers=["ok", "case", "dt", "r_min", "r_end", "eps_max", "norm_u", "status", "msg"]
+        headers=["ok", "case", "dt", "r_min", "r_end", "eps_max", "norm_u", "status", "events", "msg"]
     )
 
     _print_header("Schwarzschild events (per run)")

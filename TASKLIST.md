@@ -22,7 +22,7 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
     * Onde: no integrador Schwarzschild no C++ (a função `simulate_schwarzschild_equatorial_rk4`), com “localização” simples (bissecção/secante no intervalo do passo).
     * Critério: o instante do evento muda pouco quando você reduz `dt` (convergência), e aparece no report.
 
-4. Corrigir classificação BOUND/UNBOUND/CAPTURE (Newton e Schwarzschild)
+4. Corrigir classificação BOUND/UNBOUND/CAPTURE (Newton e Schwarzschild) 🆗
 
     * Newton: caso hiperbólico não pode sair como BOUND se sua definição for física. Definir status por energia específica: E<0 bound, E≥0 unbound.
     * Schwarzschild: CAPTURE tem que significar “cruzou horizonte” (ou r<r+ em Kerr), não “cheguei perto e chutei”.
@@ -31,27 +31,27 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
 
 5. Teste de convergência automático (varrer dt)
 
-* No Python: criar um modo `--convergence` que roda cada case com dt, dt/2, dt/4 e mede slope da ordem (Newton deve tender a 4 em regime suave com RK4).
-* Onde: `src/relorbit_py/validate.py`.
-* Critério: relatório com “ordem observada” e plots comparativos.
+    * No Python: criar um modo `--convergence` que roda cada case com dt, dt/2, dt/4 e mede slope da ordem (Newton deve tender a 4 em regime suave com RK4).
+    * Onde: `src/relorbit_py/validate.py`.
+    * Critério: relatório com “ordem observada” e plots comparativos.
 
 6. Ajustar plots para não mentirem visualmente
 
-* Plots log: hoje você faz clip em 1e-300 e pode gerar gráficos “quadrados” gigantes. Melhor:
+    * Plots log: hoje você faz clip em 1e-300 e pode gerar gráficos “quadrados” gigantes. Melhor:
 
-  * usar `np.maximum(abs_eps, eps_floor)` com `eps_floor` documentado,
-  * e colocar no plot também uma linha horizontal do critério (ex.: 1e-10).
-* Onde: `_plot_schw` e `_plot_newton` em `validate.py`.
-* Critério: plots interpretáveis, com limites e referência do threshold.
+      * usar `np.maximum(abs_eps, eps_floor)` com `eps_floor` documentado,
+      * e colocar no plot também uma linha horizontal do critério (ex.: 1e-10).
+    * Onde: `_plot_schw` e `_plot_newton` em `validate.py`.
+    * Critério: plots interpretáveis, com limites e referência do threshold.
 
 7. Reprodutibilidade (um comando que faz tudo)
 
-* Criar um `Makefile` simples (ou `scripts/run_all.ps1`) que:
+    * Criar um `Makefile` simples (ou `scripts/run_all.ps1`) que:
 
-  * instala `pip -e .`,
-  * roda `python -m relorbit_py.validate --plots`,
-  * gera `out/report.json`.
-* Critério: qualquer máquina roda igual, sem “passos mágicos”.
+      * instala `pip -e .`,
+      * roda `python -m relorbit_py.validate --plots`,
+      * gera `out/report.json`.
+    * Critério: qualquer máquina roda igual, sem “passos mágicos”.
 
 FEATURES (P1/P2 — para “botar pra quebrar” no TCC)
 

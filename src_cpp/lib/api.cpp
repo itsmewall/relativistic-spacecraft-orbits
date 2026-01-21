@@ -1,4 +1,3 @@
-// src_cpp/lib/api.cpp
 #include "relorbit/api.hpp"
 #include <cmath>
 #include <stdexcept>
@@ -9,15 +8,6 @@ static inline std::array<double,4> f_newton(double mu, const std::array<double,4
     const double x = s[0], y = s[1], vx = s[2], vy = s[3];
     const double r2 = x*x + y*y;
     const double r = std::sqrt(r2);
-
-    // evita divisão por zero / NaN
-    if (!(r > 0.0) || !std::isfinite(r)) {
-        return { std::numeric_limits<double>::quiet_NaN(),
-                 std::numeric_limits<double>::quiet_NaN(),
-                 std::numeric_limits<double>::quiet_NaN(),
-                 std::numeric_limits<double>::quiet_NaN() };
-    }
-
     const double invr3 = 1.0 / (r*r*r);
     const double ax = -mu * x * invr3;
     const double ay = -mu * y * invr3;
@@ -36,6 +26,13 @@ static inline double h_newton(const std::array<double,4>& s) {
     return x*vy - y*vx;
 }
 
+static inline OrbitStatus status_from_energy(double E0, double tol = 0.0) {
+    // Regra física: E<0 bound; E>=0 unbound (parabólica entra como unbound por definição)
+    // tol pode ser usado se você quiser tratar ruído numérico perto de 0.
+    if (E0 < -tol) return OrbitStatus::BOUND;
+    return OrbitStatus::UNBOUND;
+}
+
 TrajectoryNewton simulate_newton_rk4(
     double mu,
     const std::array<double,4>& state0,
@@ -45,11 +42,6 @@ TrajectoryNewton simulate_newton_rk4(
 ) {
     if (tf <= t0) throw std::runtime_error("tf must be > t0");
     if (!(cfg.dt > 0.0) && cfg.n_steps <= 0) throw std::runtime_error("cfg.dt must be > 0 if n_steps==0");
-    if (!(mu > 0.0) || !std::isfinite(mu)) throw std::runtime_error("mu must be > 0 and finite");
-
-    // energia inicial define bound/unbound (teoria)
-    const double e0 = energy_newton(mu, state0);
-    if (!std::isfinite(e0)) throw std::runtime_error("invalid initial state: energy is non-finite");
 
     int n = cfg.n_steps;
     if (n <= 0) {
@@ -64,12 +56,13 @@ TrajectoryNewton simulate_newton_rk4(
     out.energy.reserve(static_cast<size_t>(n)+1);
     out.h.reserve(static_cast<size_t>(n)+1);
 
-    // status físico default (só cai pra ERROR se quebrar)
-    out.status = (e0 < 0.0) ? OrbitStatus::BOUND : OrbitStatus::UNBOUND;
-    out.message.clear();
-
     std::array<double,4> s = state0;
     double t = t0;
+
+    // Define status já no estado inicial (teoria)
+    const double E0 = energy_newton(mu, s);
+    out.status = status_from_energy(E0, /*tol=*/0.0);
+    out.message.clear();
 
     auto push = [&]() {
         out.t.push_back(t);
@@ -84,20 +77,26 @@ TrajectoryNewton simulate_newton_rk4(
         const auto k1 = f_newton(mu, s);
 
         std::array<double,4> s2 {
-            s[0] + 0.5*dt*k1[0], s[1] + 0.5*dt*k1[1],
-            s[2] + 0.5*dt*k1[2], s[3] + 0.5*dt*k1[3]
+            s[0] + 0.5*dt*k1[0],
+            s[1] + 0.5*dt*k1[1],
+            s[2] + 0.5*dt*k1[2],
+            s[3] + 0.5*dt*k1[3]
         };
         const auto k2 = f_newton(mu, s2);
 
         std::array<double,4> s3 {
-            s[0] + 0.5*dt*k2[0], s[1] + 0.5*dt*k2[1],
-            s[2] + 0.5*dt*k2[2], s[3] + 0.5*dt*k2[3]
+            s[0] + 0.5*dt*k2[0],
+            s[1] + 0.5*dt*k2[1],
+            s[2] + 0.5*dt*k2[2],
+            s[3] + 0.5*dt*k2[3]
         };
         const auto k3 = f_newton(mu, s3);
 
         std::array<double,4> s4 {
-            s[0] + dt*k3[0], s[1] + dt*k3[1],
-            s[2] + dt*k3[2], s[3] + dt*k3[3]
+            s[0] + dt*k3[0],
+            s[1] + dt*k3[1],
+            s[2] + dt*k3[2],
+            s[3] + dt*k3[3]
         };
         const auto k4 = f_newton(mu, s4);
 
@@ -115,8 +114,12 @@ TrajectoryNewton simulate_newton_rk4(
         }
     }
 
-    // Se quiser, pode deixar uma msg curta quando for UNBOUND (opcional)
-    // if (out.status == OrbitStatus::UNBOUND && out.message.empty()) out.message = "specific energy >= 0 => unbound";
+    // Se quiser “reafirmar” o status ao fim, pode (não muda a teoria em 2-body ideal):
+    // Só não sobrescreve ERROR.
+    if (out.status != OrbitStatus::ERROR && !out.energy.empty()) {
+        const double E_init = out.energy.front();
+        out.status = status_from_energy(E_init, /*tol=*/0.0);
+    }
 
     return out;
 }
