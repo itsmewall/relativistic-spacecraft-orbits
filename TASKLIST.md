@@ -13,7 +13,7 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
     * Onde: `src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp` e a struct de output; depois expor via pybind.
     * Critério: `max|norm_u|` deve diminuir quando você reduz `dt` (teste de convergência).
 
-3. Event detection de verdade (horizonte e turning points)
+3. Event detection de verdade (horizonte e turning points) 🆗
 
     * Implementar detecção de eventos:
 
@@ -24,10 +24,10 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
 
 4. Corrigir classificação BOUND/UNBOUND/CAPTURE (Newton e Schwarzschild)
 
-* Newton: caso hiperbólico não pode sair como BOUND se sua definição for física. Definir status por energia específica: E<0 bound, E≥0 unbound.
-* Schwarzschild: CAPTURE tem que significar “cruzou horizonte” (ou r<r+ em Kerr), não “cheguei perto e chutei”.
-* Onde: C++ (`newton.hpp` e `schwarzschild_equatorial.hpp`) e refletir no report.
-* Critério: status bate com teoria (energia/potencial efetivo).
+    * Newton: caso hiperbólico não pode sair como BOUND se sua definição for física. Definir status por energia específica: E<0 bound, E≥0 unbound.
+    * Schwarzschild: CAPTURE tem que significar “cruzou horizonte” (ou r<r+ em Kerr), não “cheguei perto e chutei”.
+    * Onde: C++ (`newton.hpp` e `schwarzschild_equatorial.hpp`) e refletir no report.
+    * Critério: status bate com teoria (energia/potencial efetivo).
 
 5. Teste de convergência automático (varrer dt)
 
