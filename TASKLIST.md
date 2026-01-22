@@ -29,7 +29,7 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
     * Onde: C++ (`newton.hpp` e `schwarzschild_equatorial.hpp`) e refletir no report.
     * Critério: status bate com teoria (energia/potencial efetivo).
 
-5. Teste de convergência automático (varrer dt)
+5. Teste de convergência automático (varrer dt) 🆗
 
     * No Python: criar um modo `--convergence` que roda cada case com dt, dt/2, dt/4 e mede slope da ordem (Newton deve tender a 4 em regime suave com RK4).
     * Onde: `src/relorbit_py/validate.py`.
