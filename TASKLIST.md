@@ -35,7 +35,7 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
     * Onde: `src/relorbit_py/validate.py`.
     * Critério: relatório com “ordem observada” e plots comparativos.
 
-6. Ajustar plots para não mentirem visualmente
+6. Ajustar plots para não mentirem visualmente 🆗
 
     * Plots log: hoje você faz clip em 1e-300 e pode gerar gráficos “quadrados” gigantes. Melhor:
 
@@ -44,7 +44,7 @@ CORREÇÕES (P0 — faça antes de qualquer “feature bonita”)
     * Onde: `_plot_schw` e `_plot_newton` em `validate.py`.
     * Critério: plots interpretáveis, com limites e referência do threshold.
 
-7. Reprodutibilidade (um comando que faz tudo)
+7. Reprodutibilidade (um comando que faz tudo) 🆗
 
     * Criar um `Makefile` simples (ou `scripts/run_all.ps1`) que:
 
