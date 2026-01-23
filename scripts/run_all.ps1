@@ -19,6 +19,7 @@ Set-Location $repoRoot
 Write-Host "==> Repo root: $repoRoot"
 Write-Host "==> OutDir:    $OutDir"
 Write-Host "==> Cases:     $Cases"
+Write-Host "==> Format:    $Format"
 
 function Get-PythonCmd {
   if (Get-Command py -ErrorAction SilentlyContinue) {
@@ -45,6 +46,12 @@ if ($LASTEXITCODE -ne 0) { throw "Falha no pip install -e ." }
 Write-Host "`n==> [2/2] python -m relorbit_py.validate --plots --out $OutDir --cases $Cases"
 & $pyExe @pyArgs -m relorbit_py.validate --plots --out $OutDir --cases $Cases
 if ($LASTEXITCODE -ne 0) { throw "Falha na validação." }
+
+
+# 3) Roda a animação 
+Write-Host "`n==> [3/3] python -m relorbit_py.animate --out $OutDir --cases $Cases --format $Format"
+& $pyExe @pyArgs -m relorbit_py.animate --out $OutDir --cases $Cases --format $Format
+if ($LASTEXITCODE -ne 0) { throw "Falha na animação." }
 
 Write-Host "`n==> OK. Gerados:"
 Write-Host "    - $OutDir\report.json"
