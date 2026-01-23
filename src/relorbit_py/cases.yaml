@@ -12,6 +12,8 @@ suites:
         span: [0.0, 100.0]
         solver:
           dt: 1.0e-3
+          # n_steps opcional (se omitido, simulate_case decide)
+          # n_steps: 100000
         criteria:
           # Invariantes (validação principal)
           energy_rel_drift_max: 1.0e-6
@@ -67,9 +69,13 @@ suites:
           convergence_abs_err_max: 1.0e-9
           convergence_rel_err_max: 1.0e-6
 
+
   schwarzschild:
     description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0,pr0)."
     cases:
+      # ======================================================
+      # Circular (3 dt para convergência)
+      # ======================================================
       - name: schwarzschild_circular_M1_r10_dt1e3
         model: schwarzschild
         params:
@@ -85,6 +91,14 @@ suites:
         criteria:
           status: BOUND
           constraint_abs_max: 1.0e-10
+
+          # time checks (ligados por padrão, explicitando aqui)
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 1.0e-5
+          dt_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_circular_M1_r10_dt5e4
         model: schwarzschild
@@ -102,6 +116,13 @@ suites:
           status: BOUND
           constraint_abs_max: 1.0e-10
 
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 1.0e-5
+          dt_dtau_abs_err_max: 1.0e-3
+
       - name: schwarzschild_circular_M1_r10_dt2p5e4
         model: schwarzschild
         params:
@@ -118,6 +139,17 @@ suites:
           status: BOUND
           constraint_abs_max: 1.0e-10
 
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 1.0e-5
+          dt_dtau_abs_err_max: 1.0e-3
+
+
+      # ======================================================
+      # Bound turning (periapse) (3 dt para convergência)
+      # ======================================================
       - name: schwarzschild_bound_turning_M1_r12_dt1e3
         model: schwarzschild
         params:
@@ -135,6 +167,13 @@ suites:
           status: BOUND
           constraint_abs_max: 1.0e-8
           must_have_events: ["periapse"]
+
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 1.0e-5
+          dt_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_bound_turning_M1_r12_dt5e4
         model: schwarzschild
@@ -154,6 +193,13 @@ suites:
           constraint_abs_max: 1.0e-8
           must_have_events: ["periapse"]
 
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 1.0e-5
+          dt_dtau_abs_err_max: 1.0e-3
+
       - name: schwarzschild_bound_turning_M1_r12_dt2p5e4
         model: schwarzschild
         params:
@@ -172,8 +218,21 @@ suites:
           constraint_abs_max: 1.0e-8
           must_have_events: ["periapse"]
 
-      # CAPTURE agora significa horizonte, não r_cap.
-      # Nota: perto do horizonte, tcoord (tempo coordenado Schwarzschild) é patológico; não validamos dt/dtau aqui.
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 1.0e-5
+          dt_dtau_abs_err_max: 1.0e-3
+
+
+      # ======================================================
+      # Plunge / Capture (3 dt para convergência)
+      #
+      # Perto do horizonte:
+      # - tcoord (Schwarzschild) é patológico (explode) => require_tcoord=false
+      # - se você tiver vcoord (EF ingoing), pode ligar require_vcoord=true
+      # ======================================================
       - name: schwarzschild_plunge_M1_r5p8_dt5e4
         model: schwarzschild
         params:
@@ -181,7 +240,7 @@ suites:
           E: 0.9431662428100122
           L: 3.466162967069742
           capture_r: 2.5
-          capture_eps: 1.0e-6     # antes 1e-12 (perto demais do horizonte = instável)
+          capture_eps: 1.0e-6
         pr0: -0.02
         state0: [5.8, 0.0]
         span: [0.0, 200.0]
@@ -191,7 +250,15 @@ suites:
           status: CAPTURE
           constraint_abs_max: 1.0e-6
           must_have_events: ["horizon"]
+
           require_tcoord: false
+          require_vcoord: false
+
+          # ainda usamos máscara A_min nos checks de v/dv se você ligar vcoord
+          time_A_min: 1.0e-6
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_plunge_M1_r5p8_dt2p5e4
         model: schwarzschild
@@ -210,7 +277,14 @@ suites:
           status: CAPTURE
           constraint_abs_max: 1.0e-6
           must_have_events: ["horizon"]
+
           require_tcoord: false
+          require_vcoord: false
+
+          time_A_min: 1.0e-6
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_plunge_M1_r5p8_dt1p25e4
         model: schwarzschild
@@ -229,4 +303,11 @@ suites:
           status: CAPTURE
           constraint_abs_max: 1.0e-6
           must_have_events: ["horizon"]
+
           require_tcoord: false
+          require_vcoord: false
+
+          time_A_min: 1.0e-6
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3

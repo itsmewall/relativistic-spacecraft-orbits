@@ -1,3 +1,4 @@
+// src_cpp/pybind/_engine.cpp
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -83,12 +84,18 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("r", &relorbit::TrajectorySchwarzschildEq::r)
         .def_readonly("phi", &relorbit::TrajectorySchwarzschildEq::phi)
 
-        // t(τ) — coordenada temporal Schwarzschild
+        // t(τ) — coordenada temporal Schwarzschild (singular no horizonte)
         .def_readonly("tcoord", &relorbit::TrajectorySchwarzschildEq::tcoord)
 
-        // Alias opcional p/ ergonomia em Python: traj.t == traj.tcoord
+        // v(τ) — tempo regular no horizonte (ingoing Eddington–Finkelstein)
+        .def_readonly("vcoord", &relorbit::TrajectorySchwarzschildEq::vcoord)
+
+        // Alias opcional p/ ergonomia em Python
         .def_property_readonly("t", [](const relorbit::TrajectorySchwarzschildEq& tr) {
             return tr.tcoord;
+        })
+        .def_property_readonly("v", [](const relorbit::TrajectorySchwarzschildEq& tr) {
+            return tr.vcoord;
         })
 
         .def_readonly("pr", &relorbit::TrajectorySchwarzschildEq::pr)
@@ -98,14 +105,14 @@ PYBIND11_MODULE(_engine, m) {
 
         // FD (finite-difference)
         .def_readonly("ut_fd", &relorbit::TrajectorySchwarzschildEq::ut_fd)
+        .def_readonly("vt_fd", &relorbit::TrajectorySchwarzschildEq::vt_fd)
         .def_readonly("ur_fd", &relorbit::TrajectorySchwarzschildEq::ur_fd)
         .def_readonly("uphi_fd", &relorbit::TrajectorySchwarzschildEq::uphi_fd)
         .def_readonly("norm_u", &relorbit::TrajectorySchwarzschildEq::norm_u)
 
-        // =========================================
-        // NOVO: séries por construção (theory)
-        // =========================================
+        // séries por construção (theory)
         .def_readonly("ut_theory", &relorbit::TrajectorySchwarzschildEq::ut_theory)
+        .def_readonly("vt_theory", &relorbit::TrajectorySchwarzschildEq::vt_theory)
         .def_readonly("ur_theory", &relorbit::TrajectorySchwarzschildEq::ur_theory)
         .def_readonly("uphi_theory", &relorbit::TrajectorySchwarzschildEq::uphi_theory)
         .def_readonly("norm_u_theory", &relorbit::TrajectorySchwarzschildEq::norm_u_theory)
@@ -114,6 +121,7 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("event_kind", &relorbit::TrajectorySchwarzschildEq::event_kind)
         .def_readonly("event_tau", &relorbit::TrajectorySchwarzschildEq::event_tau)
         .def_readonly("event_tcoord", &relorbit::TrajectorySchwarzschildEq::event_tcoord)
+        .def_readonly("event_vcoord", &relorbit::TrajectorySchwarzschildEq::event_vcoord)
         .def_readonly("event_r", &relorbit::TrajectorySchwarzschildEq::event_r)
         .def_readonly("event_phi", &relorbit::TrajectorySchwarzschildEq::event_phi)
         .def_readonly("event_pr", &relorbit::TrajectorySchwarzschildEq::event_pr)
@@ -126,7 +134,7 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("r0", &relorbit::TrajectorySchwarzschildEq::r0)
         .def_readonly("phi0", &relorbit::TrajectorySchwarzschildEq::phi0);
 
-    // --- Schw: ponteiro explícito para fixar a assinatura nova (com pr0) ---
+    // --- Schw: ponteiro explícito para fixar a assinatura (com pr0) ---
     using SchwFn = relorbit::TrajectorySchwarzschildEq (*)(
         double, double, double, double, double, double, double, double,
         const relorbit::SolverCfg&, double, double

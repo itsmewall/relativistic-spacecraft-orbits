@@ -1,5 +1,7 @@
+// src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp
 #pragma once
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -16,8 +18,11 @@ struct TrajectorySchwarzschildEq {
     std::vector<double> r;
     std::vector<double> phi;
 
-    // tempo coordenado t(tau)
+    // tempo coordenado de Schwarzschild t(tau) (singular no horizonte)
     std::vector<double> tcoord;
+
+    // tempo regular no horizonte (ingoing Eddington–Finkelstein) v(tau)=t+r*
+    std::vector<double> vcoord;
 
     // momento radial pr = dr/dtau
     std::vector<double> pr;
@@ -31,29 +36,31 @@ struct TrajectorySchwarzschildEq {
     std::vector<double> L_series;
 
     // =========================================
-    // Checagem independente via FD
+    // Checagem via FD (diagnóstico)
     // =========================================
     std::vector<double> ut_fd;   // dt/dtau via finite-diff
+    std::vector<double> vt_fd;   // dv/dtau via finite-diff (tempo regular)
     std::vector<double> ur_fd;   // dr/dtau via finite-diff
     std::vector<double> uphi_fd; // dphi/dtau via finite-diff
-    std::vector<double> norm_u;  // g(u,u)+1 (deve ser ~0)
+    std::vector<double> norm_u;  // g(u,u)+1 (deve ser ~0 longe do horizonte; NaN perto dele)
 
     // =========================================
-    // NOVO: séries "por construção" (teóricas)
-    // (evita ruído do FD; ótimo pra validar dt/dtau)
+    // Séries "por construção" (teóricas) — METRICA PRINCIPAL
     // =========================================
-    std::vector<double> ut_theory;   // dt/dtau = E/A
-    std::vector<double> ur_theory;   // dr/dtau = pr
-    std::vector<double> uphi_theory; // dphi/dtau = L/r^2
-    std::vector<double> norm_u_theory; // g(u,u)+1 usando (ut,ur,uphi) teóricos
+    std::vector<double> ut_theory;      // dt/dtau = E/A
+    std::vector<double> vt_theory;      // dv/dtau = (E+pr)/A
+    std::vector<double> ur_theory;      // dr/dtau = pr
+    std::vector<double> uphi_theory;    // dphi/dtau = L/r^2
+    std::vector<double> norm_u_theory;  // g(u,u)+1 usando (ut,ur,uphi) teóricos (limpo)
 
     // =========================================
     // Eventos detectados com localização no passo
     // =========================================
-    // kind: "horizon", "periapse", "apoapse", "turning_point", "capture"
+    // kind: "horizon", "periapse", "apoapse", "r_cap"
     std::vector<std::string> event_kind;
     std::vector<double> event_tau;
     std::vector<double> event_tcoord;
+    std::vector<double> event_vcoord;
     std::vector<double> event_r;
     std::vector<double> event_phi;
     std::vector<double> event_pr;
@@ -61,7 +68,7 @@ struct TrajectorySchwarzschildEq {
     OrbitStatus status = OrbitStatus::ERROR;
     std::string message;
 
-    // parâmetros do caso
+    // parâmetros do caso (ecoados para Python)
     double M = 0.0;
     double E = 0.0;
     double L = 0.0;
@@ -111,9 +118,3 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
 );
 
 } // namespace relorbit
-
-
-
-
-
-

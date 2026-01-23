@@ -187,56 +187,178 @@ def _finite_diff_first_derivative(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     return dy
 
 
-def _plot_schw_time(case_name: str, tau: np.ndarray, tcoord: np.ndarray,
-                    ut_num: Optional[np.ndarray], ut_th: Optional[np.ndarray],
-                    outdir_time: str) -> None:
+def _nan_abs_max(x: Any) -> Optional[float]:
     """
-    Plots de dilatação temporal em pasta separada:
-      - tcoord(tau)
-      - dt/dtau (numérico vs teórico) quando disponível
-      - erro relativo de dt/dtau (quando disponível)
+    max(abs(x)) ignorando NaN/Inf. Retorna None se não houver nenhum valor finito.
+    """
+    try:
+        arr = np.asarray(x, dtype=float).reshape(-1)
+    except Exception:
+        return None
+    if arr.size == 0:
+        return None
+    m = np.isfinite(arr)
+    if not np.any(m):
+        return None
+    return float(np.max(np.abs(arr[m])))
+
+
+def _stable_vt_theory(M: float, E: float, L: float, r: np.ndarray, pr: np.ndarray) -> np.ndarray:
+    """
+    vt = dv/dtau em EF ingoing.
+    Forma estável (equivalente em geodésica ideal):
+        vt = (1 + L^2/r^2) / (E - pr)
+    Evita cancelamento catastrófico quando (E+pr)->0 e A->0.
+    """
+    rr = np.maximum(np.asarray(r, dtype=float), 1e-300)
+    prr = np.asarray(pr, dtype=float)
+    B = 1.0 + (float(L) * float(L)) / (rr * rr)
+
+    denom = (float(E) - prr)
+    denom_floor = 1e-14
+    denom_safe = np.where(np.abs(denom) < denom_floor, np.sign(denom) * denom_floor, denom)
+    denom_safe = np.where(denom_safe == 0.0, denom_floor, denom_safe)
+    return B / denom_safe
+
+
+def _plot_schw_time(
+    case_name: str,
+    tau: np.ndarray,
+    tcoord: Optional[np.ndarray],
+    vcoord: Optional[np.ndarray],
+    ut_num: Optional[np.ndarray],
+    ut_th: Optional[np.ndarray],
+    vt_num: Optional[np.ndarray],
+    vt_th: Optional[np.ndarray],
+    outdir_time: str,
+) -> None:
+    """
+    Pacote de plots de tempo (t Schwarzschild e v EF):
+      - t(τ), v(τ)
+      - (t-τ), (v-τ)
+      - dt/dτ (num vs theory) + log
+      - dv/dτ (num vs theory) + log
+      - erros relativos (log) quando theory disponível
     """
     import matplotlib.pyplot as plt
 
     os.makedirs(outdir_time, exist_ok=True)
 
-    # 1) t(tau)
-    plt.figure()
-    plt.plot(tau, tcoord)
-    plt.xlabel("tau")
-    plt.ylabel("tcoord")
-    plt.title(f"{case_name}: t(τ)")
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir_time, f"{case_name}_tcoord_vs_tau.png"), dpi=150)
-    plt.close()
+    # t(τ)
+    if tcoord is not None:
+        plt.figure()
+        plt.plot(tau, tcoord)
+        plt.xlabel("tau")
+        plt.ylabel("tcoord")
+        plt.title(f"{case_name}: t(τ) Schwarzschild")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_tcoord_vs_tau.png"), dpi=150)
+        plt.close()
 
-    if ut_num is None or ut_th is None:
-        return
+        # (t-τ)
+        plt.figure()
+        plt.plot(tau, tcoord - tau)
+        plt.xlabel("tau")
+        plt.ylabel("tcoord - tau")
+        plt.title(f"{case_name}: (t-τ)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_t_minus_tau.png"), dpi=150)
+        plt.close()
 
-    # 2) dt/dtau overlay
-    plt.figure()
-    plt.plot(tau, ut_num, label="num (FD)")
-    plt.plot(tau, ut_th, label="theory")
-    plt.xlabel("tau")
-    plt.ylabel("dt/dtau")
-    plt.title(f"{case_name}: dt/dτ (num vs theory)")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_overlay.png"), dpi=150)
-    plt.close()
+    # v(τ)
+    if vcoord is not None:
+        plt.figure()
+        plt.plot(tau, vcoord)
+        plt.xlabel("tau")
+        plt.ylabel("vcoord")
+        plt.title(f"{case_name}: v(τ) EF ingoing")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_vcoord_vs_tau.png"), dpi=150)
+        plt.close()
 
-    # 3) erro relativo
-    with np.errstate(divide="ignore", invalid="ignore"):
-        rel = np.abs((ut_num - ut_th) / np.maximum(np.abs(ut_th), 1e-300))
-    plt.figure()
-    plt.plot(tau, rel)
-    plt.yscale("log")
-    plt.xlabel("tau")
-    plt.ylabel("rel_err |(ut_num-ut_th)/ut_th|")
-    plt.title(f"{case_name}: rel error dt/dτ")
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_relerr_log.png"), dpi=150)
-    plt.close()
+        # (v-τ)
+        plt.figure()
+        plt.plot(tau, vcoord - tau)
+        plt.xlabel("tau")
+        plt.ylabel("vcoord - tau")
+        plt.title(f"{case_name}: (v-τ)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_v_minus_tau.png"), dpi=150)
+        plt.close()
+
+    # dt/dτ
+    if (ut_num is not None) and (ut_th is not None):
+        plt.figure()
+        plt.plot(tau, ut_num, label="num (FD)")
+        plt.plot(tau, ut_th, label="theory")
+        plt.xlabel("tau")
+        plt.ylabel("dt/dtau")
+        plt.title(f"{case_name}: dt/dτ (num vs theory)")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_overlay.png"), dpi=150)
+        plt.close()
+
+        plt.figure()
+        plt.plot(tau, np.abs(ut_num) + 1e-300, label="|num|")
+        plt.plot(tau, np.abs(ut_th) + 1e-300, label="|theory|")
+        plt.yscale("log")
+        plt.xlabel("tau")
+        plt.ylabel("|dt/dtau| (log)")
+        plt.title(f"{case_name}: |dt/dτ| (log)")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_log.png"), dpi=150)
+        plt.close()
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rel = np.abs((ut_num - ut_th) / np.maximum(np.abs(ut_th), 1e-300))
+        plt.figure()
+        plt.plot(tau, rel + 1e-300)
+        plt.yscale("log")
+        plt.xlabel("tau")
+        plt.ylabel("rel_err |(ut_num-ut_th)/ut_th| (log)")
+        plt.title(f"{case_name}: rel error dt/dτ (log)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_relerr_log.png"), dpi=150)
+        plt.close()
+
+    # dv/dτ
+    if (vt_num is not None) and (vt_th is not None):
+        plt.figure()
+        plt.plot(tau, vt_num, label="num (FD)")
+        plt.plot(tau, vt_th, label="theory")
+        plt.xlabel("tau")
+        plt.ylabel("dv/dtau")
+        plt.title(f"{case_name}: dv/dτ (num vs theory)")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_dv_dtau_overlay.png"), dpi=150)
+        plt.close()
+
+        plt.figure()
+        plt.plot(tau, np.abs(vt_num) + 1e-300, label="|num|")
+        plt.plot(tau, np.abs(vt_th) + 1e-300, label="|theory|")
+        plt.yscale("log")
+        plt.xlabel("tau")
+        plt.ylabel("|dv/dtau| (log)")
+        plt.title(f"{case_name}: |dv/dτ| (log)")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_dv_dtau_log.png"), dpi=150)
+        plt.close()
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rel = np.abs((vt_num - vt_th) / np.maximum(np.abs(vt_th), 1e-300))
+        plt.figure()
+        plt.plot(tau, rel + 1e-300)
+        plt.yscale("log")
+        plt.xlabel("tau")
+        plt.ylabel("rel_err |(vt_num-vt_th)/vt_th| (log)")
+        plt.title(f"{case_name}: rel error dv/dτ (log)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(outdir_time, f"{case_name}_dv_dtau_relerr_log.png"), dpi=150)
+        plt.close()
 
 
 # ============================================================
@@ -266,17 +388,22 @@ def _extract_events(traj: Any) -> List[Dict[str, Any]]:
     kind = list(getattr(traj, "event_kind"))
     tau = list(getattr(traj, "event_tau", []))
     tcoord = list(getattr(traj, "event_tcoord", []))
+    vcoord = list(getattr(traj, "event_vcoord", [])) if hasattr(traj, "event_vcoord") else []
     r = list(getattr(traj, "event_r", []))
     phi = list(getattr(traj, "event_phi", []))
     pr = list(getattr(traj, "event_pr", []))
 
-    n = min(len(kind), len(tau), len(tcoord), len(r), len(phi), len(pr))
+    if not vcoord:
+        vcoord = [float("nan")] * len(tau)
+
+    n = min(len(kind), len(tau), len(tcoord), len(vcoord), len(r), len(phi), len(pr))
     events: List[Dict[str, Any]] = []
     for i in range(n):
         events.append({
             "kind": str(kind[i]),
             "tau": float(tau[i]),
             "tcoord": float(tcoord[i]),
+            "vcoord": float(vcoord[i]),
             "r": float(r[i]),
             "phi": float(phi[i]),
             "pr": float(pr[i]),
@@ -434,17 +561,6 @@ def _validate_schw(
     eps = np.array(traj.epsilon, dtype=float)
     eps_max = float(np.max(np.abs(eps))) if eps.size else None
 
-    norm_u_max = None
-    if hasattr(traj, "norm_u"):
-        nu = np.array(traj.norm_u, dtype=float)
-        if nu.size != tau.size:
-            raise RuntimeError(
-                f"norm_u shape mismatch no caso '{case.get('name')}': "
-                f"len(norm_u)={nu.size} vs len(tau)={tau.size}"
-            )
-        if nu.size > 0:
-            norm_u_max = float(np.nanmax(np.abs(nu)))
-
     crit = case.get("criteria", {}) or {}
     eps_max_allowed = float(crit.get("constraint_abs_max", 1e-10))
     expected_status = str(crit.get("status", "BOUND"))
@@ -457,7 +573,7 @@ def _validate_schw(
     events_ok, events_reason = _check_event_criteria(events, crit)
 
     # ----------------------------
-    # NOVO: validação de t(τ) e dt/dτ
+    # Time: t(τ) e dt/dτ (e também v(τ))
     # ----------------------------
     params = case.get("params", {}) or {}
     M = float(params.get("M", case.get("M", 1.0)))
@@ -466,38 +582,69 @@ def _validate_schw(
     pr0 = _case_pr0(case)
 
     require_tcoord = bool(crit.get("require_tcoord", True))
-    tcoord = None
-    if hasattr(traj, "tcoord"):
-        tcoord = np.array(getattr(traj, "tcoord"), dtype=float)
-    elif hasattr(traj, "t"):
-        # se você usar alias no pybind
-        tcoord = np.array(getattr(traj, "t"), dtype=float)
-
-    tcoord_present = (tcoord is not None) and (tcoord.size == tau.size)
-
-    tcoord_finite_ok = True
-    tcoord_mono_ok = True
-    dt_dtau_abs_max = None
-    dt_dtau_rel_max = None
-    dt_dtau_mask_used = None
-    time_reason = ""
+    require_vcoord = bool(crit.get("require_vcoord", False))
 
     # limites para não avaliar “em cima” do horizonte (onde A->0 e t explode)
-    # você pode afrouxar/ajustar por critério no YAML
     A_min = float(crit.get("time_A_min", 1e-6))
     rel_err_max_allowed = float(crit.get("dt_dtau_rel_err_max", 1e-5))
     abs_err_max_allowed = float(crit.get("dt_dtau_abs_err_max", 1e-3))
     mono_tol = float(crit.get("tcoord_monotone_tol", 0.0))
+
+    rel_err_v_max_allowed = float(crit.get("dv_dtau_rel_err_max", 1e-5))
+    abs_err_v_max_allowed = float(crit.get("dv_dtau_abs_err_max", 1e-3))
+    mono_v_tol = float(crit.get("vcoord_monotone_tol", 0.0))
+
+    # A(r)
+    A = 1.0 - (2.0 * M / np.maximum(r, 1e-300))
+    mask_A = np.isfinite(A) & np.isfinite(r) & (A >= A_min) & np.isfinite(tau)
+    mask_n = int(np.count_nonzero(mask_A))
+
+    # tcoord (Schwarzschild)
+    tcoord = None
+    if hasattr(traj, "tcoord"):
+        tcoord = np.array(getattr(traj, "tcoord"), dtype=float)
+    elif hasattr(traj, "t"):
+        tcoord = np.array(getattr(traj, "t"), dtype=float)
+    tcoord_present = (tcoord is not None) and (tcoord.size == tau.size)
+
+    # vcoord (EF ingoing)
+    vcoord = None
+    if hasattr(traj, "vcoord"):
+        vcoord = np.array(getattr(traj, "vcoord"), dtype=float)
+    elif hasattr(traj, "v"):
+        vcoord = np.array(getattr(traj, "v"), dtype=float)
+    vcoord_present = (vcoord is not None) and (vcoord.size == tau.size)
+
+    # checks t
+    tcoord_finite_ok = True
+    tcoord_mono_ok = True
+    dt_dtau_abs_max = None
+    dt_dtau_rel_max = None
+
+    # checks v
+    vcoord_finite_ok = True
+    vcoord_mono_ok = True
+    dv_dtau_abs_max = None
+    dv_dtau_rel_max = None
+
+    time_reason = ""
+
+    # ---------- tcoord ----------
+    ut_num_for_plot = None
+    ut_th_for_plot = None
 
     if require_tcoord and not tcoord_present:
         tcoord_finite_ok = False
         tcoord_mono_ok = False
         time_reason = "missing tcoord (required)"
     elif tcoord_present:
-        tcoord_finite_ok = _is_finite_array(tcoord)
-        tcoord_mono_ok = _is_monotone_increasing(tcoord, tol=mono_tol)
+        if mask_n > 0:
+            tcoord_finite_ok = bool(np.all(np.isfinite(tcoord[mask_A])))
+            tcoord_mono_ok = _is_monotone_increasing(tcoord[mask_A], tol=mono_tol)
+        else:
+            tcoord_finite_ok = True
+            tcoord_mono_ok = True
 
-        # ut numérico: preferir ut_fd do C++ (mais estável), senão finite-diff
         ut_num = None
         if hasattr(traj, "ut_fd"):
             ut_fd = np.array(getattr(traj, "ut_fd"), dtype=float)
@@ -506,55 +653,168 @@ def _validate_schw(
         if ut_num is None:
             ut_num = _finite_diff_first_derivative(tcoord, tau)
 
-        # ut teórico
-        A = 1.0 - (2.0 * M / np.maximum(r, 1e-300))
-        ut_th = np.full_like(A, np.nan, dtype=float)
-        mask = np.isfinite(A) & np.isfinite(r) & (A > A_min) & np.isfinite(ut_num) & np.isfinite(tcoord)
+        ut_th = None
+        if hasattr(traj, "ut_theory"):
+            ut_theory = np.array(getattr(traj, "ut_theory"), dtype=float)
+            if ut_theory.size == tau.size:
+                ut_th = ut_theory
+        if ut_th is None:
+            ut_th = np.full_like(A, np.nan, dtype=float)
+            ut_th[mask_A] = float(Epar) / A[mask_A]
 
-        # guarda pra report
-        dt_dtau_mask_used = int(np.count_nonzero(mask))
+        ut_num_for_plot = ut_num
+        ut_th_for_plot = ut_th
 
-        if np.any(mask):
-            ut_th[mask] = float(Epar) / A[mask]
-
-            abs_err = np.abs(ut_num[mask] - ut_th[mask])
+        mask_ut = mask_A & np.isfinite(ut_num) & np.isfinite(ut_th)
+        if np.any(mask_ut):
+            abs_err = np.abs(ut_num[mask_ut] - ut_th[mask_ut])
             dt_dtau_abs_max = float(np.max(abs_err)) if abs_err.size else None
 
             with np.errstate(divide="ignore", invalid="ignore"):
-                rel_err = abs_err / np.maximum(np.abs(ut_th[mask]), 1e-300)
+                rel_err = abs_err / np.maximum(np.abs(ut_th[mask_ut]), 1e-300)
             dt_dtau_rel_max = float(np.max(rel_err)) if rel_err.size else None
 
             if (dt_dtau_rel_max is not None) and (dt_dtau_rel_max > rel_err_max_allowed):
                 time_reason = (time_reason + " | " if time_reason else "") + f"dt/dtau rel_err_max>{rel_err_max_allowed:.1e}"
             if (dt_dtau_abs_max is not None) and (dt_dtau_abs_max > abs_err_max_allowed):
                 time_reason = (time_reason + " | " if time_reason else "") + f"dt/dtau abs_err_max>{abs_err_max_allowed:.1e}"
-        else:
-            # se não tem nenhum ponto "longe" do horizonte, não reprova por isso
-            dt_dtau_abs_max = None
-            dt_dtau_rel_max = None
 
         if not tcoord_finite_ok:
-            time_reason = (time_reason + " | " if time_reason else "") + "tcoord non-finite"
+            time_reason = (time_reason + " | " if time_reason else "") + "tcoord non-finite (masked)"
         if not tcoord_mono_ok:
-            time_reason = (time_reason + " | " if time_reason else "") + "tcoord not monotone increasing"
+            time_reason = (time_reason + " | " if time_reason else "") + "tcoord not monotone (masked)"
 
         if time_plotdir is not None:
             try:
-                ut_th_plot = None
-                if np.any(mask):
-                    ut_th_plot = ut_th
-                _plot_schw_time(case["name"], tau, tcoord, ut_num, ut_th_plot, time_plotdir)
+                _plot_schw_time(
+                    case["name"],
+                    tau=tau,
+                    tcoord=tcoord,
+                    vcoord=vcoord if vcoord_present else None,
+                    ut_num=ut_num,
+                    ut_th=ut_th,
+                    vt_num=None,
+                    vt_th=None,
+                    outdir_time=time_plotdir,
+                )
             except Exception:
                 pass
 
+    # ---------- vcoord ----------
+    vt_num_for_plot = None
+    vt_th_for_plot = None
+
+    if require_vcoord and not vcoord_present:
+        vcoord_finite_ok = False
+        vcoord_mono_ok = False
+        time_reason = (time_reason + " | " if time_reason else "") + "missing vcoord (required)"
+    elif vcoord_present:
+        # IMPORTANT: valide v majoritariamente no mesmo mask_A (onde A não está no abismo)
+        if mask_n > 0:
+            vcoord_finite_ok = bool(np.all(np.isfinite(vcoord[mask_A])))
+            vcoord_mono_ok = _is_monotone_increasing(vcoord[mask_A], tol=mono_v_tol)
+        else:
+            vcoord_finite_ok = _is_finite_array(vcoord)
+            vcoord_mono_ok = _is_monotone_increasing(vcoord, tol=mono_v_tol)
+
+        vt_num = None
+        if hasattr(traj, "vt_fd"):
+            vt_fd = np.array(getattr(traj, "vt_fd"), dtype=float)
+            if vt_fd.size == tau.size:
+                vt_num = vt_fd
+        if vt_num is None:
+            vt_num = _finite_diff_first_derivative(vcoord, tau)
+
+        vt_th = None
+        if hasattr(traj, "vt_theory"):
+            vt_theory = np.array(getattr(traj, "vt_theory"), dtype=float)
+            if vt_theory.size == tau.size:
+                vt_th = vt_theory
+        if vt_th is None:
+            pr = np.array(getattr(traj, "pr"), dtype=float)
+            vt_th = np.full_like(A, np.nan, dtype=float)
+            vt_th[mask_A] = _stable_vt_theory(M, Epar, Lpar, r[mask_A], pr[mask_A])
+
+        vt_num_for_plot = vt_num
+        vt_th_for_plot = vt_th
+
+        mask_vt = mask_A & np.isfinite(vt_num) & np.isfinite(vt_th)
+        if np.any(mask_vt):
+            abs_err = np.abs(vt_num[mask_vt] - vt_th[mask_vt])
+            dv_dtau_abs_max = float(np.max(abs_err)) if abs_err.size else None
+
+            with np.errstate(divide="ignore", invalid="ignore"):
+                rel_err = abs_err / np.maximum(np.abs(vt_th[mask_vt]), 1e-300)
+            dv_dtau_rel_max = float(np.max(rel_err)) if rel_err.size else None
+
+            if (dv_dtau_rel_max is not None) and (dv_dtau_rel_max > rel_err_v_max_allowed):
+                time_reason = (time_reason + " | " if time_reason else "") + f"dv/dtau rel_err_max>{rel_err_v_max_allowed:.1e}"
+            if (dv_dtau_abs_max is not None) and (dv_dtau_abs_max > abs_err_v_max_allowed):
+                time_reason = (time_reason + " | " if time_reason else "") + f"dv/dtau abs_err_max>{abs_err_v_max_allowed:.1e}"
+
+        if not vcoord_finite_ok:
+            time_reason = (time_reason + " | " if time_reason else "") + "vcoord non-finite (masked)"
+        if not vcoord_mono_ok:
+            time_reason = (time_reason + " | " if time_reason else "") + "vcoord not monotone (masked)"
+
+        if time_plotdir is not None:
+            try:
+                _plot_schw_time(
+                    case["name"],
+                    tau=tau,
+                    tcoord=tcoord if tcoord_present else None,
+                    vcoord=vcoord,
+                    ut_num=ut_num_for_plot,
+                    ut_th=ut_th_for_plot,
+                    vt_num=vt_num,
+                    vt_th=vt_th,
+                    outdir_time=time_plotdir,
+                )
+            except Exception:
+                pass
+
+    # decisão time_ok
     time_ok = True
     if require_tcoord:
-        time_ok = bool(tcoord_present and tcoord_finite_ok and tcoord_mono_ok)
-        # se temos erro calculado, também exige ficar dentro
+        time_ok = time_ok and bool(tcoord_present and tcoord_finite_ok and tcoord_mono_ok)
         if dt_dtau_rel_max is not None:
             time_ok = time_ok and (dt_dtau_rel_max <= rel_err_max_allowed)
         if dt_dtau_abs_max is not None:
             time_ok = time_ok and (dt_dtau_abs_max <= abs_err_max_allowed)
+
+    if require_vcoord:
+        time_ok = time_ok and bool(vcoord_present and vcoord_finite_ok and vcoord_mono_ok)
+        if dv_dtau_rel_max is not None:
+            time_ok = time_ok and (dv_dtau_rel_max <= rel_err_v_max_allowed)
+        if dv_dtau_abs_max is not None:
+            time_ok = time_ok and (dv_dtau_abs_max <= abs_err_v_max_allowed)
+
+    # ----------------------------
+    # norm_u: usar THEORY como juiz (FD é diagnóstico)
+    # ----------------------------
+    norm_u_fd_max = None
+    norm_u_theory_max = None
+
+    if hasattr(traj, "norm_u"):
+        nu_fd = np.array(getattr(traj, "norm_u"), dtype=float)
+        if nu_fd.size != tau.size:
+            raise RuntimeError(
+                f"norm_u shape mismatch no caso '{case.get('name')}': "
+                f"len(norm_u)={nu_fd.size} vs len(tau)={tau.size}"
+            )
+        # FD explode perto do horizonte; ainda assim calculamos para depuração
+        norm_u_fd_max = _nan_abs_max(nu_fd)
+
+    if hasattr(traj, "norm_u_theory"):
+        nu_th = np.array(getattr(traj, "norm_u_theory"), dtype=float)
+        if nu_th.size == tau.size:
+            if mask_n > 0:
+                norm_u_theory_max = _nan_abs_max(nu_th[mask_A])
+            else:
+                norm_u_theory_max = _nan_abs_max(nu_th)
+
+    # métrica principal publicada (para convergência): theory se existir; senão, cai pro FD
+    norm_u_max_primary = norm_u_theory_max if (norm_u_theory_max is not None) else norm_u_fd_max
 
     passed = (
         (eps_max is not None and eps_max <= eps_max_allowed)
@@ -592,17 +852,33 @@ def _validate_schw(
         "r_min": r_min,
         "r_end": r_end,
         "constraint_abs_max": float(eps_max) if eps_max is not None else None,
-        "norm_u_abs_max": norm_u_max,
+
+        # norm_u (principal = theory, fallback = FD)
+        "norm_u_abs_max": norm_u_max_primary,
+        "norm_u_abs_max_theory": norm_u_theory_max,
+        "norm_u_abs_max_fd": norm_u_fd_max,
+
         "events": events,
         "events_compact": events_compact,
 
-        # --- NOVO: time dilation diagnostics ---
+        # --- t diagnostics ---
         "tcoord_present": bool(tcoord_present),
         "tcoord_finite_ok": bool(tcoord_finite_ok),
         "tcoord_monotone_ok": bool(tcoord_mono_ok),
         "dt_dtau_abs_max": dt_dtau_abs_max,
         "dt_dtau_rel_max": dt_dtau_rel_max,
-        "dt_dtau_mask_n": dt_dtau_mask_used,
+
+        # --- v diagnostics ---
+        "vcoord_present": bool(vcoord_present),
+        "vcoord_finite_ok": bool(vcoord_finite_ok),
+        "vcoord_monotone_ok": bool(vcoord_mono_ok),
+        "dv_dtau_abs_max": dv_dtau_abs_max,
+        "dv_dtau_rel_max": dv_dtau_rel_max,
+
+        # mask info
+        "time_mask_A_min": float(A_min),
+        "time_mask_n": int(mask_n),
+
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
@@ -610,12 +886,18 @@ def _validate_schw(
             "must_have_events": crit.get("must_have_events", None),
             "must_not_have_events": crit.get("must_not_have_events", None),
 
-            # time criteria (defaults)
+            # time criteria
             "require_tcoord": require_tcoord,
+            "require_vcoord": require_vcoord,
             "time_A_min": A_min,
+
             "tcoord_monotone_tol": mono_tol,
             "dt_dtau_rel_err_max": rel_err_max_allowed,
             "dt_dtau_abs_err_max": abs_err_max_allowed,
+
+            "vcoord_monotone_tol": mono_v_tol,
+            "dv_dtau_rel_err_max": rel_err_v_max_allowed,
+            "dv_dtau_abs_err_max": abs_err_v_max_allowed,
         },
     }
     return out
@@ -865,7 +1147,7 @@ def _check_convergence_schw(
         grp_sorted = sorted(grp, key=lambda x: float(x.get("dt", 0.0)), reverse=True)
 
         dts = [float(g["dt"]) for g in grp_sorted]
-        nus_raw = [g.get("norm_u_abs_max", None) for g in grp_sorted]
+        nus_raw = [g.get("norm_u_abs_max", None) for g in grp_sorted]  # primary (theory preferred)
         names = [g.get("name", "") for g in grp_sorted]
 
         if any(v is None for v in nus_raw):
@@ -1236,14 +1518,15 @@ def main() -> None:
             _fmt_f(r.get("r_min"), width=10, prec=6),
             _fmt_f(r.get("r_end"), width=10, prec=6),
             _fmt_e(r.get("constraint_abs_max"), width=12),
-            _fmt_e(r.get("norm_u_abs_max"), width=12),
+            _fmt_e(r.get("norm_u_abs_max"), width=12),        # primary (theory preferred)
+            _fmt_e(r.get("norm_u_abs_max_fd"), width=12),     # diagnostic
             str(r.get("status", "")),
             r.get("events_compact", "") or "",
             _short_msg(str(r.get("message", ""))),
         ])
     _print_table(
         s_rows,
-        headers=["ok", "case", "dt", "r_min", "r_end", "eps_max", "norm_u", "status", "events", "msg"]
+        headers=["ok", "case", "dt", "r_min", "r_end", "eps_max", "norm_u", "norm_u_fd", "status", "events", "msg"]
     )
 
     _print_header("Schwarzschild events (per run)")
@@ -1256,22 +1539,27 @@ def main() -> None:
     if not any_events:
         print("No events detected in these runs.")
 
-    _print_header("Schwarzschild time-dilation checks (t(τ) and dt/dτ)")
+    _print_header("Schwarzschild time-dilation checks (t(τ), v(τ), dt/dτ, dv/dτ)")
     td_rows: List[List[str]] = []
     for r in schw_results:
         td_rows.append([
-            "OK" if (r.get("tcoord_present") and r.get("tcoord_finite_ok") and r.get("tcoord_monotone_ok")) else "WARN/FAIL",
+            "OK" if r["passed"] else "WARN/FAIL",
             r["name"],
             "yes" if r.get("tcoord_present") else "no",
             "yes" if r.get("tcoord_finite_ok") else "no",
             "yes" if r.get("tcoord_monotone_ok") else "no",
             _fmt_e(r.get("dt_dtau_rel_max"), width=12),
             _fmt_e(r.get("dt_dtau_abs_max"), width=12),
-            str(r.get("dt_dtau_mask_n", "")),
+            "yes" if r.get("vcoord_present") else "no",
+            "yes" if r.get("vcoord_finite_ok") else "no",
+            "yes" if r.get("vcoord_monotone_ok") else "no",
+            _fmt_e(r.get("dv_dtau_rel_max"), width=12),
+            _fmt_e(r.get("dv_dtau_abs_max"), width=12),
+            str(r.get("time_mask_n", "")),
         ])
     _print_table(
         td_rows,
-        headers=["ok", "case", "tcoord", "finite", "mono", "rel_err_max", "abs_err_max", "mask_n"],
+        headers=["ok", "case", "t", "t_finite", "t_mono", "dt_rel", "dt_abs", "v", "v_finite", "v_mono", "dv_rel", "dv_abs", "mask_n"],
     )
 
     _print_header("Schwarzschild convergence: norm_u_abs_max should not increase when dt decreases (with tolerance)")

@@ -49,9 +49,9 @@ if ($LASTEXITCODE -ne 0) { throw "Falha na validação." }
 
 
 # 3) Roda a animação 
-Write-Host "`n==> [3/3] python -m relorbit_py.animate --out $OutDir --cases $Cases --format $Format"
-& $pyExe @pyArgs -m relorbit_py.animate --out $OutDir --cases $Cases --format $Format
-if ($LASTEXITCODE -ne 0) { throw "Falha na animação." }
+#Write-Host "`n==> [3/3] python -m relorbit_py.animate --out $OutDir --cases $Cases --format $Format"
+#& $pyExe @pyArgs -m relorbit_py.animate --out $OutDir --cases $Cases --format $Format
+#if ($LASTEXITCODE -ne 0) { throw "Falha na animação." }
 
 Write-Host "`n==> OK. Gerados:"
 Write-Host "    - $OutDir\report.json"
