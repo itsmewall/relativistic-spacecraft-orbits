@@ -93,8 +93,8 @@
     },
     {
       "suite": "schwarzschild",
-      "ok": true,
-      "ok_cases": true,
+      "ok": false,
+      "ok_cases": false,
       "ok_convergence": true,
       "ok_events_convergence": true,
       "n_cases": 9,
@@ -119,12 +119,23 @@
           "norm_u_abs_max": 1.4026779737719153e-11,
           "events": [],
           "events_compact": "",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 6.858291712319442e-12,
+          "dt_dtau_rel_max": 5.738058526007615e-12,
+          "dt_dtau_mask_n": 200001,
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND",
             "min_events": 0,
             "must_have_events": null,
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
         },
@@ -148,12 +159,23 @@
           "norm_u_abs_max": 3.909694790138474e-11,
           "events": [],
           "events_compact": "",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 2.716848968020713e-11,
+          "dt_dtau_rel_max": 2.2730789296732858e-11,
+          "dt_dtau_mask_n": 400001,
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND",
             "min_events": 0,
             "must_have_events": null,
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
         },
@@ -177,12 +199,23 @@
           "norm_u_abs_max": 1.4780243695611262e-10,
           "events": [],
           "events_compact": "",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 8.401190854101515e-11,
+          "dt_dtau_rel_max": 7.028940562910407e-11,
+          "dt_dtau_mask_n": 800001,
           "criteria": {
             "constraint_abs_max": 1e-10,
             "status": "BOUND",
             "min_events": 0,
             "must_have_events": null,
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.9561828874675149,\"L\":3.779644730092272,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":0.0,\"span\":[0.0,200.0],\"state0\":[10.0,0.0]}"
         },
@@ -216,6 +249,12 @@
             }
           ],
           "events_compact": "periapse@51.7989",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 1.186985095547044e-06,
+          "dt_dtau_rel_max": 1.0197466456589726e-06,
+          "dt_dtau_mask_n": 200001,
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "BOUND",
@@ -223,7 +262,12 @@
             "must_have_events": [
               "periapse"
             ],
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.97,\"L\":4.0,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.12236859921595049,\"span\":[0.0,200.0],\"state0\":[12.0,0.0]}"
         },
@@ -257,6 +301,12 @@
             }
           ],
           "events_compact": "periapse@51.7989",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 5.934901272652837e-07,
+          "dt_dtau_rel_max": 5.098712433550548e-07,
+          "dt_dtau_mask_n": 400001,
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "BOUND",
@@ -264,7 +314,12 @@
             "must_have_events": [
               "periapse"
             ],
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.97,\"L\":4.0,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.12236859921595049,\"span\":[0.0,200.0],\"state0\":[12.0,0.0]}"
         },
@@ -298,6 +353,12 @@
             }
           ],
           "events_compact": "periapse@51.7989",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 2.9674445833904883e-07,
+          "dt_dtau_rel_max": 2.549351016658495e-07,
+          "dt_dtau_mask_n": 800001,
           "criteria": {
             "constraint_abs_max": 1e-08,
             "status": "BOUND",
@@ -305,15 +366,20 @@
             "must_have_events": [
               "periapse"
             ],
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.97,\"L\":4.0,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.12236859921595049,\"span\":[0.0,200.0],\"state0\":[12.0,0.0]}"
         },
         {
           "name": "schwarzschild_plunge_M1_r5p8_dt5e4",
-          "passed": true,
+          "passed": false,
           "status": "OrbitStatus.CAPTURE",
-          "message": "horizon crossed (r <= 2M*(1+eps))",
+          "message": "horizon crossed (r <= 2M*(1+eps)) | dt/dtau rel_err_max>1.0e-05 | dt/dtau abs_err_max>1.0e-03",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -348,6 +414,12 @@
             }
           ],
           "events_compact": "r_cap@56.4191; horizon@57.1229",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 881.5408703388657,
+          "dt_dtau_rel_max": 0.18343819564785993,
+          "dt_dtau_mask_n": 114246,
           "criteria": {
             "constraint_abs_max": 1e-06,
             "status": "CAPTURE",
@@ -355,15 +427,20 @@
             "must_have_events": [
               "horizon"
             ],
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.9431662428100122,\"L\":3.466162967069742,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.02,\"span\":[0.0,200.0],\"state0\":[5.8,0.0]}"
         },
         {
           "name": "schwarzschild_plunge_M1_r5p8_dt2p5e4",
-          "passed": true,
+          "passed": false,
           "status": "OrbitStatus.CAPTURE",
-          "message": "horizon crossed (r <= 2M*(1+eps))",
+          "message": "horizon crossed (r <= 2M*(1+eps)) | dt/dtau rel_err_max>1.0e-05 | dt/dtau abs_err_max>1.0e-03",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -398,6 +475,12 @@
             }
           ],
           "events_compact": "r_cap@56.4191; horizon@57.1229",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": 4500.582883863572,
+          "dt_dtau_rel_max": 0.37427340719976154,
+          "dt_dtau_mask_n": 228492,
           "criteria": {
             "constraint_abs_max": 1e-06,
             "status": "CAPTURE",
@@ -405,15 +488,20 @@
             "must_have_events": [
               "horizon"
             ],
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.9431662428100122,\"L\":3.466162967069742,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.02,\"span\":[0.0,200.0],\"state0\":[5.8,0.0]}"
         },
         {
           "name": "schwarzschild_plunge_M1_r5p8_dt1p25e4",
-          "passed": true,
+          "passed": false,
           "status": "OrbitStatus.CAPTURE",
-          "message": "horizon crossed (r <= 2M*(1+eps))",
+          "message": "horizon crossed (r <= 2M*(1+eps)) | dt/dtau rel_err_max>1.0e-05 | dt/dtau abs_err_max>1.0e-03 | tcoord not monotone increasing",
           "model": "schwarzschild",
           "M": 1.0,
           "E": 0.9431662428100122,
@@ -448,6 +536,12 @@
             }
           ],
           "events_compact": "r_cap@56.4191; horizon@57.1229",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": false,
+          "dt_dtau_abs_max": 45813.27001281195,
+          "dt_dtau_rel_max": 0.947148280077361,
+          "dt_dtau_mask_n": 456984,
           "criteria": {
             "constraint_abs_max": 1e-06,
             "status": "CAPTURE",
@@ -455,7 +549,12 @@
             "must_have_events": [
               "horizon"
             ],
-            "must_not_have_events": null
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e-05,
+            "dt_dtau_abs_err_max": 0.001
           },
           "_sig": "{\"E\":0.9431662428100122,\"L\":3.466162967069742,\"M\":1.0,\"capture_eps\":1e-12,\"capture_r\":2.5,\"model\":\"schwarzschild\",\"pr0\":-0.02,\"span\":[0.0,200.0],\"state0\":[5.8,0.0]}"
         }

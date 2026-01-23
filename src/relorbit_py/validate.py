@@ -131,27 +131,112 @@ def _short_msg(msg: str, maxlen: int = 76) -> str:
 
 
 def _status_endswith(status_str: str, expected_tail: str) -> bool:
-    # status_str costuma vir como "OrbitStatus.BOUND"
-    # expected_tail pode vir como "BOUND"
     return str(status_str).endswith(str(expected_tail))
 
 
-def _safe_norm(x: np.ndarray) -> float:
-    x = np.asarray(x, dtype=float).reshape(-1)
-    return float(np.linalg.norm(x, ord=2))
-
-
 def _estimate_order_from_three(e_dt: float, e_dt2: float) -> Optional[float]:
-    """
-    Ordem observada p ≈ log2(e_dt / e_dt2), onde:
-      e_dt  = ||y_dt(tf) - y_dt/2(tf)||
-      e_dt2 = ||y_dt/2(tf) - y_dt/4(tf)||
-    """
     if not (np.isfinite(e_dt) and np.isfinite(e_dt2)):
         return None
     if e_dt <= 0.0 or e_dt2 <= 0.0:
         return None
     return float(math.log(e_dt / e_dt2, 2.0))
+
+
+def _is_finite_array(x: np.ndarray) -> bool:
+    return bool(np.all(np.isfinite(np.asarray(x, dtype=float))))
+
+
+def _is_monotone_increasing(x: np.ndarray, tol: float = 0.0) -> bool:
+    x = np.asarray(x, dtype=float).reshape(-1)
+    if x.size < 2:
+        return True
+    dx = np.diff(x)
+    return bool(np.all(dx >= -float(tol)))
+
+
+def _finite_diff_first_derivative(y: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """
+    dy/dx por diferenças finitas (centrada no miolo, one-sided nas bordas).
+    """
+    y = np.asarray(y, dtype=float).reshape(-1)
+    x = np.asarray(x, dtype=float).reshape(-1)
+    n = y.size
+    if n == 0:
+        return np.array([], dtype=float)
+    if n == 1:
+        return np.array([0.0], dtype=float)
+    dy = np.zeros(n, dtype=float)
+
+    # bordas
+    dx0 = x[1] - x[0]
+    if abs(dx0) < 1e-300:
+        dx0 = 1e-300
+    dy[0] = (y[1] - y[0]) / dx0
+
+    dxn = x[-1] - x[-2]
+    if abs(dxn) < 1e-300:
+        dxn = 1e-300
+    dy[-1] = (y[-1] - y[-2]) / dxn
+
+    # centro
+    for i in range(1, n - 1):
+        dxi = x[i + 1] - x[i - 1]
+        if abs(dxi) < 1e-300:
+            dxi = 1e-300
+        dy[i] = (y[i + 1] - y[i - 1]) / dxi
+    return dy
+
+
+def _plot_schw_time(case_name: str, tau: np.ndarray, tcoord: np.ndarray,
+                    ut_num: Optional[np.ndarray], ut_th: Optional[np.ndarray],
+                    outdir_time: str) -> None:
+    """
+    Plots de dilatação temporal em pasta separada:
+      - tcoord(tau)
+      - dt/dtau (numérico vs teórico) quando disponível
+      - erro relativo de dt/dtau (quando disponível)
+    """
+    import matplotlib.pyplot as plt
+
+    os.makedirs(outdir_time, exist_ok=True)
+
+    # 1) t(tau)
+    plt.figure()
+    plt.plot(tau, tcoord)
+    plt.xlabel("tau")
+    plt.ylabel("tcoord")
+    plt.title(f"{case_name}: t(τ)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir_time, f"{case_name}_tcoord_vs_tau.png"), dpi=150)
+    plt.close()
+
+    if ut_num is None or ut_th is None:
+        return
+
+    # 2) dt/dtau overlay
+    plt.figure()
+    plt.plot(tau, ut_num, label="num (FD)")
+    plt.plot(tau, ut_th, label="theory")
+    plt.xlabel("tau")
+    plt.ylabel("dt/dtau")
+    plt.title(f"{case_name}: dt/dτ (num vs theory)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_overlay.png"), dpi=150)
+    plt.close()
+
+    # 3) erro relativo
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = np.abs((ut_num - ut_th) / np.maximum(np.abs(ut_th), 1e-300))
+    plt.figure()
+    plt.plot(tau, rel)
+    plt.yscale("log")
+    plt.xlabel("tau")
+    plt.ylabel("rel_err |(ut_num-ut_th)/ut_th|")
+    plt.title(f"{case_name}: rel error dt/dτ")
+    plt.tight_layout()
+    plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_relerr_log.png"), dpi=150)
+    plt.close()
 
 
 # ============================================================
@@ -167,7 +252,6 @@ def _energy_specific_newton(mu: float, state: List[float]) -> float:
 
 def _newton_status_theory(mu: float, state0: List[float]) -> str:
     e0 = _energy_specific_newton(mu, state0)
-    # convenção: e<0 bound, e>=0 unbound
     return "BOUND" if e0 < 0.0 else "UNBOUND"
 
 
@@ -176,7 +260,6 @@ def _newton_status_theory(mu: float, state0: List[float]) -> str:
 # ============================================================
 
 def _extract_events(traj: Any) -> List[Dict[str, Any]]:
-    """Extrai eventos do objeto traj (se existirem) em formato estável para report."""
     if not hasattr(traj, "event_kind"):
         return []
 
@@ -223,12 +306,6 @@ def _events_to_kind_map(events: List[Dict[str, Any]]) -> Dict[str, List[float]]:
 
 
 def _check_event_criteria(events: List[Dict[str, Any]], crit: Dict[str, Any]) -> Tuple[bool, str]:
-    """
-    Critérios opcionais:
-      - min_events: int
-      - must_have_events: ["capture","periapse",...]
-      - must_not_have_events: ["horizon",...]
-    """
     kinds = [str(e.get("kind", "")) for e in events]
     kinds_set = set(kinds)
 
@@ -238,20 +315,14 @@ def _check_event_criteria(events: List[Dict[str, Any]], crit: Dict[str, Any]) ->
 
     must_have = crit.get("must_have_events", None)
     if must_have is not None:
-        if isinstance(must_have, str):
-            must_have_list = [must_have]
-        else:
-            must_have_list = list(must_have)
+        must_have_list = [must_have] if isinstance(must_have, str) else list(must_have)
         missing = [k for k in must_have_list if str(k) not in kinds_set]
         if missing:
             return False, f"events: missing required kinds {missing}"
 
     must_not = crit.get("must_not_have_events", None)
     if must_not is not None:
-        if isinstance(must_not, str):
-            must_not_list = [must_not]
-        else:
-            must_not_list = list(must_not)
+        must_not_list = [must_not] if isinstance(must_not, str) else list(must_not)
         present = [k for k in must_not_list if str(k) in kinds_set]
         if present:
             return False, f"events: forbidden kinds present {present}"
@@ -281,7 +352,6 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
     params = case.get("params", {}) or {}
     mu = float(params.get("mu", case.get("mu", 1.0)))
 
-    # teoria (por energia inicial do state0)
     state0 = case.get("state0", None)
     energy0 = None
     theory_status = None
@@ -293,16 +363,14 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
             energy0 = None
             theory_status = None
 
-    # Checagem opcional de status
     status_str = str(getattr(traj, "status", ""))
-    expected_status = crit.get("status", None)  # se não existir, não exige
+    expected_status = crit.get("status", None)
     status_ok = True
     status_reason = ""
     if expected_status is not None:
         status_ok = _status_endswith(status_str, str(expected_status))
         if not status_ok:
             status_reason = f"status mismatch (got={status_str}, expected=*{expected_status})"
-        # também pode exigir que bata com teoria (se theory_status disponível)
         if crit.get("status_must_match_theory", False) and theory_status is not None:
             if not _status_endswith(status_str, theory_status):
                 status_ok = False
@@ -317,7 +385,6 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
     if (not passed) and status_reason:
         msg = (msg + " | " + status_reason).strip(" |")
 
-    # estado final para convergência (quando usada)
     y_end = None
     try:
         y_arr = np.array(traj.y, dtype=float)
@@ -351,7 +418,11 @@ def _validate_newton(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dic
     }
 
 
-def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[str, Any]:
+def _validate_schw(
+    case: Dict[str, Any],
+    plotdir: Optional[str] = None,
+    time_plotdir: Optional[str] = None,
+) -> Dict[str, Any]:
     traj = _unwrap_traj(simulate_case(case, "schwarzschild"))
 
     tau = np.array(traj.tau, dtype=float)
@@ -383,23 +454,117 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
 
     events = _extract_events(traj)
     events_compact = _events_compact_str(events)
-
     events_ok, events_reason = _check_event_criteria(events, crit)
 
-    passed = (
-        (eps_max is not None and eps_max <= eps_max_allowed)
-        and status_ok
-        and events_ok
-    )
-
-    dt, n_steps = _get_solver_dt_nsteps(case)
-    tau0, tauf = _get_span(case)
-
+    # ----------------------------
+    # NOVO: validação de t(τ) e dt/dτ
+    # ----------------------------
     params = case.get("params", {}) or {}
     M = float(params.get("M", case.get("M", 1.0)))
     Epar = float(params.get("E", case.get("E")))
     Lpar = float(params.get("L", case.get("L")))
     pr0 = _case_pr0(case)
+
+    require_tcoord = bool(crit.get("require_tcoord", True))
+    tcoord = None
+    if hasattr(traj, "tcoord"):
+        tcoord = np.array(getattr(traj, "tcoord"), dtype=float)
+    elif hasattr(traj, "t"):
+        # se você usar alias no pybind
+        tcoord = np.array(getattr(traj, "t"), dtype=float)
+
+    tcoord_present = (tcoord is not None) and (tcoord.size == tau.size)
+
+    tcoord_finite_ok = True
+    tcoord_mono_ok = True
+    dt_dtau_abs_max = None
+    dt_dtau_rel_max = None
+    dt_dtau_mask_used = None
+    time_reason = ""
+
+    # limites para não avaliar “em cima” do horizonte (onde A->0 e t explode)
+    # você pode afrouxar/ajustar por critério no YAML
+    A_min = float(crit.get("time_A_min", 1e-6))
+    rel_err_max_allowed = float(crit.get("dt_dtau_rel_err_max", 1e-5))
+    abs_err_max_allowed = float(crit.get("dt_dtau_abs_err_max", 1e-3))
+    mono_tol = float(crit.get("tcoord_monotone_tol", 0.0))
+
+    if require_tcoord and not tcoord_present:
+        tcoord_finite_ok = False
+        tcoord_mono_ok = False
+        time_reason = "missing tcoord (required)"
+    elif tcoord_present:
+        tcoord_finite_ok = _is_finite_array(tcoord)
+        tcoord_mono_ok = _is_monotone_increasing(tcoord, tol=mono_tol)
+
+        # ut numérico: preferir ut_fd do C++ (mais estável), senão finite-diff
+        ut_num = None
+        if hasattr(traj, "ut_fd"):
+            ut_fd = np.array(getattr(traj, "ut_fd"), dtype=float)
+            if ut_fd.size == tau.size:
+                ut_num = ut_fd
+        if ut_num is None:
+            ut_num = _finite_diff_first_derivative(tcoord, tau)
+
+        # ut teórico
+        A = 1.0 - (2.0 * M / np.maximum(r, 1e-300))
+        ut_th = np.full_like(A, np.nan, dtype=float)
+        mask = np.isfinite(A) & np.isfinite(r) & (A > A_min) & np.isfinite(ut_num) & np.isfinite(tcoord)
+
+        # guarda pra report
+        dt_dtau_mask_used = int(np.count_nonzero(mask))
+
+        if np.any(mask):
+            ut_th[mask] = float(Epar) / A[mask]
+
+            abs_err = np.abs(ut_num[mask] - ut_th[mask])
+            dt_dtau_abs_max = float(np.max(abs_err)) if abs_err.size else None
+
+            with np.errstate(divide="ignore", invalid="ignore"):
+                rel_err = abs_err / np.maximum(np.abs(ut_th[mask]), 1e-300)
+            dt_dtau_rel_max = float(np.max(rel_err)) if rel_err.size else None
+
+            if (dt_dtau_rel_max is not None) and (dt_dtau_rel_max > rel_err_max_allowed):
+                time_reason = (time_reason + " | " if time_reason else "") + f"dt/dtau rel_err_max>{rel_err_max_allowed:.1e}"
+            if (dt_dtau_abs_max is not None) and (dt_dtau_abs_max > abs_err_max_allowed):
+                time_reason = (time_reason + " | " if time_reason else "") + f"dt/dtau abs_err_max>{abs_err_max_allowed:.1e}"
+        else:
+            # se não tem nenhum ponto "longe" do horizonte, não reprova por isso
+            dt_dtau_abs_max = None
+            dt_dtau_rel_max = None
+
+        if not tcoord_finite_ok:
+            time_reason = (time_reason + " | " if time_reason else "") + "tcoord non-finite"
+        if not tcoord_mono_ok:
+            time_reason = (time_reason + " | " if time_reason else "") + "tcoord not monotone increasing"
+
+        if time_plotdir is not None:
+            try:
+                ut_th_plot = None
+                if np.any(mask):
+                    ut_th_plot = ut_th
+                _plot_schw_time(case["name"], tau, tcoord, ut_num, ut_th_plot, time_plotdir)
+            except Exception:
+                pass
+
+    time_ok = True
+    if require_tcoord:
+        time_ok = bool(tcoord_present and tcoord_finite_ok and tcoord_mono_ok)
+        # se temos erro calculado, também exige ficar dentro
+        if dt_dtau_rel_max is not None:
+            time_ok = time_ok and (dt_dtau_rel_max <= rel_err_max_allowed)
+        if dt_dtau_abs_max is not None:
+            time_ok = time_ok and (dt_dtau_abs_max <= abs_err_max_allowed)
+
+    passed = (
+        (eps_max is not None and eps_max <= eps_max_allowed)
+        and status_ok
+        and events_ok
+        and bool(time_ok)
+    )
+
+    dt, n_steps = _get_solver_dt_nsteps(case)
+    tau0, tauf = _get_span(case)
 
     if plotdir is not None:
         _plot_schw(case["name"], traj, plotdir, eps_max_allowed)
@@ -407,8 +572,10 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
     msg = getattr(traj, "message", "") or ""
     if (not passed) and (not events_ok) and events_reason:
         msg = (msg + " | " + events_reason).strip(" |")
+    if (not passed) and time_reason:
+        msg = (msg + " | " + time_reason).strip(" |")
 
-    return {
+    out = {
         "name": case["name"],
         "passed": bool(passed),
         "status": status_str,
@@ -428,14 +595,30 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
         "norm_u_abs_max": norm_u_max,
         "events": events,
         "events_compact": events_compact,
+
+        # --- NOVO: time dilation diagnostics ---
+        "tcoord_present": bool(tcoord_present),
+        "tcoord_finite_ok": bool(tcoord_finite_ok),
+        "tcoord_monotone_ok": bool(tcoord_mono_ok),
+        "dt_dtau_abs_max": dt_dtau_abs_max,
+        "dt_dtau_rel_max": dt_dtau_rel_max,
+        "dt_dtau_mask_n": dt_dtau_mask_used,
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
             "min_events": int(crit.get("min_events", 0) or 0),
             "must_have_events": crit.get("must_have_events", None),
             "must_not_have_events": crit.get("must_not_have_events", None),
+
+            # time criteria (defaults)
+            "require_tcoord": require_tcoord,
+            "time_A_min": A_min,
+            "tcoord_monotone_tol": mono_tol,
+            "dt_dtau_rel_err_max": rel_err_max_allowed,
+            "dt_dtau_abs_err_max": abs_err_max_allowed,
         },
     }
+    return out
 
 
 # ============================================================
@@ -443,14 +626,6 @@ def _validate_schw(case: Dict[str, Any], plotdir: Optional[str] = None) -> Dict[
 # ============================================================
 
 def _clone_case_with_dt_consistent(case: Dict[str, Any], dt_target: float) -> Dict[str, Any]:
-    """
-    Cria um clone do case, ajustando (dt, n_steps) para:
-      - manter (t0, tf) fixos
-      - usar n_steps inteiro
-      - usar dt_eff = (tf-t0)/n_steps (muito próximo de dt_target)
-
-    Isso evita comparar soluções com tempos finais diferentes.
-    """
     c = copy.deepcopy(case)
     t0, tf = _get_span(c)
     T = float(tf - t0)
@@ -466,12 +641,6 @@ def _clone_case_with_dt_consistent(case: Dict[str, Any], dt_target: float) -> Di
 
 
 def _traj_max_diff_coarse_vs_fine(tr_coarse: Any, tr_fine: Any, stride: int) -> float:
-    """
-    Compara trajetórias no MESMO conjunto de tempos do coarse.
-    Assume que tr_fine tem dt menor e contém amostras nos mesmos tempos:
-      tr_fine.y[0], tr_fine.y[stride], tr_fine.y[2*stride], ...
-    Retorna max ||delta_state||_2 ao longo do tempo.
-    """
     yc = np.array(tr_coarse.y, dtype=float)
     yf = np.array(tr_fine.y, dtype=float)
 
@@ -489,9 +658,6 @@ def _traj_max_diff_coarse_vs_fine(tr_coarse: Any, tr_fine: Any, stride: int) -> 
 
 
 def _roundoff_floor_estimate(tr: Any) -> float:
-    """
-    Estima piso de roundoff (ordem de grandeza) para erro acumulado.
-    """
     y = np.array(tr.y, dtype=float)
     N = max(1, y.shape[0])
     scale = max(1.0, float(np.max(np.linalg.norm(y, axis=1))))
@@ -513,7 +679,7 @@ def _run_convergence_newton_one_case(
     abs_err_max = float(crit.get("convergence_abs_err_max", 1e-9 if rigorous else 1e-8))
 
     dt0, _ = _get_solver_dt_nsteps(base_case)
-    dt_targets = [float(dt0), float(dt0)/2.0, float(dt0)/4.0]
+    dt_targets = [float(dt0), float(dt0) / 2.0, float(dt0) / 4.0]
 
     cases = [_clone_case_with_dt_consistent(base_case, dt_t) for dt_t in dt_targets]
 
@@ -532,9 +698,8 @@ def _run_convergence_newton_one_case(
         tr = _unwrap_traj(simulate_case(c, "newton"))
         trajs.append(tr)
 
-    tr0, tr1, tr2 = trajs  # dt, dt/2, dt/4
+    tr0, tr1, tr2 = trajs
 
-    # Erro robusto: max ao longo do tempo
     try:
         e_dt = _traj_max_diff_coarse_vs_fine(tr0, tr1, stride=2)
         e_dt2 = _traj_max_diff_coarse_vs_fine(tr1, tr2, stride=2)
@@ -657,11 +822,6 @@ def _run_convergence_newton_one_case(
 # ============================================================
 
 def _schw_signature(case: Dict[str, Any]) -> str:
-    """
-    Assinatura física (o que deve permanecer igual entre dt diferentes):
-      (M,E,L,r0,phi0,pr0,span,capture_r,capture_eps)
-    Exclui solver e criteria.
-    """
     params = case.get("params", {}) or {}
     state0 = case.get("state0", None)
     span = case.get("span", None)
@@ -932,7 +1092,7 @@ def _print_table(rows: List[List[str]], headers: List[str]) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", default=os.path.join(os.path.dirname(__file__), "cases.yaml"))
-    ap.add_argument("--plots", action="store_true", help="Generate plots in <out>/plots")
+    ap.add_argument("--plots", action="store_true", help="Generate plots in <out>/plots and time plots in <out>/time_plots")
     ap.add_argument("--out", default="out", help="Output directory")
 
     ap.add_argument(
@@ -952,9 +1112,14 @@ def main() -> None:
 
     cfg = load_cases_yaml(args.cases)
     outdir = args.out
+
     plotdir = os.path.join(outdir, "plots")
+    time_plotdir = os.path.join(outdir, "time_plots")
+
     if args.plots or args.convergence:
         os.makedirs(plotdir, exist_ok=True)
+    if args.plots:
+        os.makedirs(time_plotdir, exist_ok=True)
 
     report: Dict[str, Any] = {"suites": []}
 
@@ -1040,7 +1205,11 @@ def main() -> None:
     ok_schw_cases = True
 
     for c in schw_cases:
-        rr = _validate_schw(c, plotdir if args.plots else None)
+        rr = _validate_schw(
+            c,
+            plotdir if args.plots else None,
+            time_plotdir if args.plots else None,
+        )
         rr["_sig"] = _schw_signature(c)
         schw_results.append(rr)
         ok_schw_cases = ok_schw_cases and rr["passed"]
@@ -1086,6 +1255,24 @@ def main() -> None:
             print(f"{r['name']} (dt={r['dt']:.2e}): {_events_compact_str(evs)}")
     if not any_events:
         print("No events detected in these runs.")
+
+    _print_header("Schwarzschild time-dilation checks (t(τ) and dt/dτ)")
+    td_rows: List[List[str]] = []
+    for r in schw_results:
+        td_rows.append([
+            "OK" if (r.get("tcoord_present") and r.get("tcoord_finite_ok") and r.get("tcoord_monotone_ok")) else "WARN/FAIL",
+            r["name"],
+            "yes" if r.get("tcoord_present") else "no",
+            "yes" if r.get("tcoord_finite_ok") else "no",
+            "yes" if r.get("tcoord_monotone_ok") else "no",
+            _fmt_e(r.get("dt_dtau_rel_max"), width=12),
+            _fmt_e(r.get("dt_dtau_abs_max"), width=12),
+            str(r.get("dt_dtau_mask_n", "")),
+        ])
+    _print_table(
+        td_rows,
+        headers=["ok", "case", "tcoord", "finite", "mono", "rel_err_max", "abs_err_max", "mask_n"],
+    )
 
     _print_header("Schwarzschild convergence: norm_u_abs_max should not increase when dt decreases (with tolerance)")
     if not conv:
@@ -1155,6 +1342,8 @@ def main() -> None:
 
     if args.plots or args.convergence:
         print(f"\nPlots em: {plotdir}")
+    if args.plots:
+        print(f"Time plots em: {time_plotdir}")
     print(f"Relatório em: {os.path.join(outdir, 'report.json')}")
 
 

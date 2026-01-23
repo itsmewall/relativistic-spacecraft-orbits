@@ -59,54 +59,50 @@ A) Física GR de alto nível (P1)
 
 1. Schwarzschild completo (expor também t(τ))
 
-* Hoje você plota só r, φ. Para missão você precisa de coordenada temporal:
+  * Hoje você plota só r, φ. Para missão você precisa de coordenada temporal:
 
-  * integrar `dt/dτ = E / (1 - 2M/r)`.
-* Onde: Schwarzschild C++ e pybind (TrajectorySchwarzschildEq).
-* Critério: report inclui `t(τ)` e você consegue discutir dilatação temporal.
+    * integrar `dt/dτ = E / (1 - 2M/r)`.
+  * Onde: Schwarzschild C++ e pybind (TrajectorySchwarzschildEq).
+  * Critério: report inclui `t(τ)` e você consegue discutir dilatação temporal.
 
 2. Validação clássica de Schwarzschild: periélio e ISCO
 
-* Implementar casos e métricas:
+    * Implementar casos e métricas:
 
-  * Precessão do periélio (Δφ por órbita).
-  * Verificar ISCO em r=6M: estabilidade muda.
-* Onde: novos casos em YAML e validação em `validate.py`.
-* Critério: seus resultados reproduzem tendências esperadas e você consegue citar o valor e mostrar plot/medida.
+      * Precessão do periélio (Δφ por órbita).
+      * Verificar ISCO em r=6M: estabilidade muda.
+    * Onde: novos casos em YAML e validação em `validate.py`.
+    * Critério: seus resultados reproduzem tendências esperadas e você consegue citar o valor e mostrar plot/medida.
 
 3. Kerr equatorial (P1/P2)
 
-* Implementar geodésicas equatoriais em Kerr: prograde vs retrograde.
-* Onde: novo header `src_cpp/include/relorbit/models/kerr_equatorial.hpp`, nova função no engine e pybind.
-* Critério: plots mostrando diferença prograde/retrograde (frame dragging).
+    * Implementar geodésicas equatoriais em Kerr: prograde vs retrograde.
+    * Onde: novo header `src_cpp/include/relorbit/models/kerr_equatorial.hpp`, nova função no engine e pybind.
+    * Critério: plots mostrando diferença prograde/retrograde (frame dragging).
 
 B) Missão e propulsão (P1)
 
 4. Manobras impulsivas (Δv)
-
-* Implementar em nível “missão”: aplicar Δv em instantes/eventos (ex.: no periapse).
-* Onde: Python (mission runner) primeiro; depois otimizar em C++ se precisar.
-* Critério: tabela de Δv budget e mudança clara nos elementos/orbita.
+    * Implementar em nível “missão”: aplicar Δv em instantes/eventos (ex.: no periapse).
+    * Onde: Python (mission runner) primeiro; depois otimizar em C++ se precisar.
+    * Critério: tabela de Δv budget e mudança clara nos elementos/orbita.
 
 5. Low-thrust (thrust contínuo) + consumo de massa
-
-* Modelo simples: força constante ou throttle controlada + equação de massa (Tsiolkovsky contínuo simplificado).
-* Onde: um novo integrador/força no Newton primeiro; depois versão GR (mais avançada).
-* Critério: trajetória muda de forma previsível, consumo de propelente coerente.
+    * Modelo simples: força constante ou throttle controlada + equação de massa (Tsiolkovsky contínuo simplificado).
+    * Onde: um novo integrador/força no Newton primeiro; depois versão GR (mais avançada).
+    * Critério: trajetória muda de forma previsível, consumo de propelente coerente.
 
 6. Planejamento: targeting básico (Lambert / “match periapse”)
-
-* Newton: Lambert clássico ou solver simples para atingir periapse/rendezvous.
-* GR: ao menos targeting numérico por shooting (varrer E/L ou Δv até atingir um periapse-alvo).
-* Critério: dado um alvo (r_p desejado), o solver encontra parâmetros e reporta erro final.
+    * Newton: Lambert clássico ou solver simples para atingir periapse/rendezvous.
+    * GR: ao menos targeting numérico por shooting (varrer E/L ou Δv até atingir um periapse-alvo).
+    * Critério: dado um alvo (r_p desejado), o solver encontra parâmetros e reporta erro final.
 
 C) Atitude 6-DOF e GNC (P1)
 
 7. Dinâmica de atitude com quaternions
-
-* Estado: q (4) + ω (3). Equações padrão.
-* Onde: novo módulo C++ (ou Python primeiro): `attitude.hpp` + bindings.
-* Critério: norma de q = 1 (com renormalização controlada), energia rotacional conservada sem torque.
+    * Estado: q (4) + ω (3). Equações padrão.
+    * Onde: novo módulo C++ (ou Python primeiro): `attitude.hpp` + bindings.
+    * Critério: norma de q = 1 (com renormalização controlada), energia rotacional conservada sem torque.
 
 8. Acoplamento órbita–atitude via thrust no body frame
 

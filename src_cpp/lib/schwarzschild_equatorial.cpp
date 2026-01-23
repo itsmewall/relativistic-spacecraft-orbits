@@ -1,8 +1,8 @@
-// src_cpp/lib/schwarzschild_equatorial.cpp
 #include "relorbit/models/schwarzschild_equatorial.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <sstream>
 
 namespace relorbit {
@@ -130,7 +130,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double tau = tau0;
     double r = r0;
     double phi = phi0;
-    double tcoord = 0.0;
+    double tcoord = 0.0; // t(τ0)=0 como referência
     double pr = pr0;
 
     auto append_sample = [&](double tau_s, double r_s, double phi_s, double t_s, double pr_s) {
@@ -216,9 +216,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             break;
         }
 
-        // -----------------------------------------
         // EVENTO: turning (periapse/apoapse) via pr=0
-        // -----------------------------------------
         if (pr_prev != 0.0) {
             const bool crossed = (pr_prev < 0.0 && pr_next >= 0.0) || (pr_prev > 0.0 && pr_next <= 0.0);
             if (crossed) {
@@ -237,9 +235,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             }
         }
 
-        // -----------------------------------------
         // EVENTO: crossing de r_cap (marcador operacional; NÃO encerra)
-        // -----------------------------------------
         if (!rcap_logged) {
             double alpha = 0.0;
             if (crossing_r(r_prev, r_next, r_cap, alpha)) {
@@ -252,9 +248,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             }
         }
 
-        // -----------------------------------------
         // EVENTO: horizon crossing (CAPTURE físico)
-        // -----------------------------------------
         {
             double alpha = 0.0;
             if (crossing_r(r_prev, r_next, r_hor, alpha)) {
@@ -263,7 +257,6 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
                 const double t_ev   = lerp(t_prev,   t_next,   alpha);
                 const double pr_ev  = lerp(pr_prev,  pr_next,  alpha);
 
-                // registra evento físico e encerra
                 push_event(traj, "horizon", tau_ev, t_ev, r_hor, phi_ev, pr_ev);
 
                 tau = tau_ev;
@@ -293,7 +286,7 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     }
 
     // =========================================
-    // Pós-processamento FD + norm_u
+    // Pós-processamento: FD + norm_u
     // =========================================
     const size_t N = traj.tau.size();
     traj.ut_fd.assign(N, 0.0);
@@ -340,6 +333,41 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
             const double g_uu = (-A) * (ut * ut) + (1.0 / A) * (ur * ur) + (rr * rr) * (up * up);
             traj.norm_u[i] = g_uu + 1.0;
         }
+    }
+
+    // =========================================
+    // NOVO: séries por construção (sem FD)
+    // =========================================
+    traj.ut_theory.assign(N, 0.0);
+    traj.ur_theory.assign(N, 0.0);
+    traj.uphi_theory.assign(N, 0.0);
+    traj.norm_u_theory.assign(N, 0.0);
+
+    const double A_min = 1e-12; // evita explodir numericamente perto do horizonte
+
+    for (size_t i = 0; i < N; ++i) {
+        const double rr = traj.r[i];
+        const double A  = safe_A(M, rr);
+
+        if (!(rr > 0.0) || !is_finite(rr) || !is_finite(A) || A < A_min) {
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            traj.ut_theory[i] = nan;
+            traj.ur_theory[i] = nan;
+            traj.uphi_theory[i] = nan;
+            traj.norm_u_theory[i] = nan;
+            continue;
+        }
+
+        const double ut = E / A;
+        const double ur = traj.pr[i];           // por definição: dr/dtau = pr
+        const double up = L / (rr * rr);        // por definição: dphi/dtau = L/r^2
+
+        traj.ut_theory[i] = ut;
+        traj.ur_theory[i] = ur;
+        traj.uphi_theory[i] = up;
+
+        const double g_uu = (-A) * (ut * ut) + (1.0 / A) * (ur * ur) + (rr * rr) * (up * up);
+        traj.norm_u_theory[i] = g_uu + 1.0;
     }
 
     return traj;

@@ -1,4 +1,3 @@
-// src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp
 #pragma once
 #include <cmath>
 #include <string>
@@ -38,6 +37,15 @@ struct TrajectorySchwarzschildEq {
     std::vector<double> ur_fd;   // dr/dtau via finite-diff
     std::vector<double> uphi_fd; // dphi/dtau via finite-diff
     std::vector<double> norm_u;  // g(u,u)+1 (deve ser ~0)
+
+    // =========================================
+    // NOVO: séries "por construção" (teóricas)
+    // (evita ruído do FD; ótimo pra validar dt/dtau)
+    // =========================================
+    std::vector<double> ut_theory;   // dt/dtau = E/A
+    std::vector<double> ur_theory;   // dr/dtau = pr
+    std::vector<double> uphi_theory; // dphi/dtau = L/r^2
+    std::vector<double> norm_u_theory; // g(u,u)+1 usando (ut,ur,uphi) teóricos
 
     // =========================================
     // Eventos detectados com localização no passo
@@ -98,8 +106,14 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
     double tau0,
     double tauf,
     const SolverCfg& cfg,
-    double capture_r = 2.0,     // r <= capture_r*M
-    double capture_eps = 1e-12
+    double capture_r = 2.0,     // r <= capture_r*M  (marcador operacional)
+    double capture_eps = 1e-12  // margem do horizonte: r_hor = 2M*(1+eps)
 );
 
 } // namespace relorbit
+
+
+
+
+
+

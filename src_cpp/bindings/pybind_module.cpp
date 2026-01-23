@@ -82,19 +82,35 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("tau", &relorbit::TrajectorySchwarzschildEq::tau)
         .def_readonly("r", &relorbit::TrajectorySchwarzschildEq::r)
         .def_readonly("phi", &relorbit::TrajectorySchwarzschildEq::phi)
+
+        // t(τ) — coordenada temporal Schwarzschild
         .def_readonly("tcoord", &relorbit::TrajectorySchwarzschildEq::tcoord)
+
+        // Alias opcional p/ ergonomia em Python: traj.t == traj.tcoord
+        .def_property_readonly("t", [](const relorbit::TrajectorySchwarzschildEq& tr) {
+            return tr.tcoord;
+        })
+
         .def_readonly("pr", &relorbit::TrajectorySchwarzschildEq::pr)
         .def_readonly("epsilon", &relorbit::TrajectorySchwarzschildEq::epsilon)
         .def_readonly("E_series", &relorbit::TrajectorySchwarzschildEq::E_series)
         .def_readonly("L_series", &relorbit::TrajectorySchwarzschildEq::L_series)
+
+        // FD (finite-difference)
         .def_readonly("ut_fd", &relorbit::TrajectorySchwarzschildEq::ut_fd)
         .def_readonly("ur_fd", &relorbit::TrajectorySchwarzschildEq::ur_fd)
         .def_readonly("uphi_fd", &relorbit::TrajectorySchwarzschildEq::uphi_fd)
         .def_readonly("norm_u", &relorbit::TrajectorySchwarzschildEq::norm_u)
 
-        // =========================
-        // NOVO: eventos (para validate.py)
-        // =========================
+        // =========================================
+        // NOVO: séries por construção (theory)
+        // =========================================
+        .def_readonly("ut_theory", &relorbit::TrajectorySchwarzschildEq::ut_theory)
+        .def_readonly("ur_theory", &relorbit::TrajectorySchwarzschildEq::ur_theory)
+        .def_readonly("uphi_theory", &relorbit::TrajectorySchwarzschildEq::uphi_theory)
+        .def_readonly("norm_u_theory", &relorbit::TrajectorySchwarzschildEq::norm_u_theory)
+
+        // eventos (para validate.py)
         .def_readonly("event_kind", &relorbit::TrajectorySchwarzschildEq::event_kind)
         .def_readonly("event_tau", &relorbit::TrajectorySchwarzschildEq::event_tau)
         .def_readonly("event_tcoord", &relorbit::TrajectorySchwarzschildEq::event_tcoord)

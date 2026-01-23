@@ -1,0 +1,10 @@
+Arquivos:
+
+src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp
+src_cpp/lib/schwarzschild_equatorial.cpp
+pybind
+
+Arquivos:
+
+src/relorbit_py/validate.py
+src/relorbit_py/plots.py (sem precisar criar time_plots.py)

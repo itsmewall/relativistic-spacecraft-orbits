@@ -1,3 +1,4 @@
+# src/relorbit_py/simulate.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -119,14 +120,8 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
         capture_r = float(params.get("capture_r", case.get("capture_r", 2.0)))
         capture_eps = float(params.get("capture_eps", case.get("capture_eps", 1e-12)))
 
-        # DEBUG IMPLACÁVEL (remova quando estabilizar)
-        # Isso garante que você está rodando ESTE simulate.py e que o YAML foi lido como você pensa.
-        print(
-            f"[simulate.py] case={case.get('name')} capture_r={capture_r} capture_eps={capture_eps} pr0={pr0} "
-            f"(simulate.py file={__file__})"
-        )
-
-        # CHAMADA POR KEYWORD: impossível errar ordem / cair em default sem querer
+        # CHAMADA POR KEYWORD: evita erro de ordem e evita cair em defaults sem querer
+        # Retorno do engine já inclui tcoord (novo) e demais campos.
         return eng.simulate_schwarzschild_equatorial_rk4(
             M=M,
             E=E,

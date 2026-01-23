@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, List, Optional
 
 import numpy as np
@@ -25,6 +26,16 @@ def savefig(path: str) -> None:
     plt.close()
 
 
+def _sibling_time_dir_from_plots_dir(outdir_plots: str) -> str:
+    """
+    outdir_plots tipicamente: out/plots
+    retorna: out/time_plots
+    """
+    p = Path(outdir_plots)
+    parent = p.parent  # out/
+    return str(parent / "time_plots")
+
+
 def plot_newton(
     case_name: str,
     traj: Any,
@@ -37,9 +48,8 @@ def plot_newton(
     Plots Newton com escala log interpretável (sem "paredões" artificiais).
 
     eps_floor:
-      Piso VISUAL para evitar log(0) e evitar gráficos enganosos. Não é precisão física.
-      Escolhido para ficar bem abaixo dos thresholds típicos (1e-6, 1e-8), mas sem ser
-      ridículo (1e-300).
+      Piso VISUAL para evitar log(0) e evitar gráficos enganosos.
+      Não é precisão física; é só para legibilidade.
     """
     t = np.array(traj.t, dtype=float)
     y = np.array(traj.y, dtype=float)  # Nx4
@@ -97,6 +107,91 @@ def plot_newton(
     savefig(os.path.join(outdir, f"{case_name}_drift_rel.png"))
 
 
+def _plot_schw_time_pack(
+    case_name: str,
+    traj: Any,
+    plots_outdir: str,
+    eps_floor: float = 1e-16,
+) -> None:
+    """
+    Plots de TEMPO (dilatação temporal) para Schwarzschild.
+    Salva em out/time_plots/ (separado de out/plots/).
+
+    Conteúdo:
+      - t(τ)
+      - dt/dτ (FD) e dt/dτ (teórico = E/(1-2M/r)), quando possível
+      - (t - τ) como “descolamento” (intuitivo p/ leigo)
+      - dt/dτ em semilogy (útil perto do horizonte)
+    """
+    if not hasattr(traj, "tcoord"):
+        return
+
+    tau = np.array(traj.tau, dtype=float)
+    t = np.array(traj.tcoord, dtype=float)
+    r = np.array(traj.r, dtype=float)
+
+    if tau.size == 0 or t.size != tau.size or r.size != tau.size:
+        return
+
+    time_dir = _sibling_time_dir_from_plots_dir(plots_outdir)
+    os.makedirs(time_dir, exist_ok=True)
+
+    # t(tau)
+    plt.figure()
+    plt.plot(tau, t)
+    plt.xlabel("tau (proper time)")
+    plt.ylabel("t (Schwarzschild coordinate time)")
+    plt.title(f"Coordinate time vs proper time: {case_name}")
+    savefig(os.path.join(time_dir, f"{case_name}_tcoord_vs_tau.png"))
+
+    # t - tau (intuitivo: “quanto o relógio coordenado esticou”)
+    plt.figure()
+    plt.plot(tau, (t - tau))
+    plt.xlabel("tau")
+    plt.ylabel("t - tau")
+    plt.title(f"Time offset (t - tau): {case_name}")
+    savefig(os.path.join(time_dir, f"{case_name}_t_minus_tau.png"))
+
+    # dt/dtau via FD (se existir) + teórico (se E e M existirem)
+    dt_dtau_fd = None
+    if hasattr(traj, "ut_fd"):
+        u = np.array(traj.ut_fd, dtype=float)
+        if u.size == tau.size:
+            dt_dtau_fd = u
+
+    dt_dtau_theory = None
+    if hasattr(traj, "E") and hasattr(traj, "M"):
+        E = float(getattr(traj, "E"))
+        M = float(getattr(traj, "M"))
+        A = 1.0 - 2.0 * M / r
+        A_safe = np.where(np.abs(A) < 1e-300, np.sign(A) * 1e-300, A)
+        dt_dtau_theory = E / A_safe
+
+    if dt_dtau_fd is not None or dt_dtau_theory is not None:
+        plt.figure()
+        if dt_dtau_fd is not None:
+            plt.plot(tau, dt_dtau_fd, label="dt/dtau (FD)")
+        if dt_dtau_theory is not None:
+            plt.plot(tau, dt_dtau_theory, label="dt/dtau (theory: E/A)")
+        plt.xlabel("tau")
+        plt.ylabel("dt/dtau")
+        plt.title(f"Time dilation factor dt/dtau: {case_name}")
+        plt.legend(loc="upper right")
+        savefig(os.path.join(time_dir, f"{case_name}_dt_dtau.png"))
+
+        # versão log (para mergulho perto do horizonte)
+        plt.figure()
+        if dt_dtau_fd is not None:
+            plt.semilogy(tau, np.maximum(np.abs(dt_dtau_fd), eps_floor), label="|dt/dtau| (FD)")
+        if dt_dtau_theory is not None:
+            plt.semilogy(tau, np.maximum(np.abs(dt_dtau_theory), eps_floor), label="|dt/dtau| (theory)")
+        plt.xlabel("tau")
+        plt.ylabel("|dt/dtau| (log)")
+        plt.title(f"Time dilation factor |dt/dtau| (log): {case_name}")
+        plt.legend(loc="upper right")
+        savefig(os.path.join(time_dir, f"{case_name}_dt_dtau_log.png"))
+
+
 def plot_schw(
     case_name: str,
     traj: Any,
@@ -105,10 +200,7 @@ def plot_schw(
     eps_floor: float = 1e-16,
 ) -> None:
     """
-    Plots Schwarzschild com log interpretável + linhas do critério.
-
-    eps_floor:
-      Piso VISUAL para evitar log(0). Mantém o gráfico honesto e legível.
+    Plots Schwarzschild (out/plots) + pacote de tempo (out/time_plots) se tcoord existir.
     """
     tau = np.array(traj.tau, dtype=float)
     r = np.array(traj.r, dtype=float)
@@ -186,6 +278,11 @@ def plot_schw(
             plt.title(f"4-velocity normalization drift (log): {case_name}")
             plt.legend(loc="upper right")
             savefig(os.path.join(outdir, f"{case_name}_norm_u_log.png"))
+
+    # =========================
+    # NOVO: pacote de tempo
+    # =========================
+    _plot_schw_time_pack(case_name, traj, outdir, eps_floor=eps_floor)
 
 
 def plot_convergence_newton(
