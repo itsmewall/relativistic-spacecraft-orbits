@@ -1,0 +1,42 @@
+project:
+  name: relorbit
+  repo: relativistic-spacecraft-orbits
+  goal: >
+    Motor C++ + Python para simular órbitas (Newton e Schwarzschild equatorial),
+    com validação reprodutível (métricas + plots) e auditoria (eventos e diagnósticos).
+
+entrypoints:
+  validate:
+    cmd: python -m relorbit_py.validate
+    cases: src/relorbit_py/cases.yaml
+    outputs:
+      report: out/report.json
+      plots: out/plots
+      time_plots: out/time_plots
+      classical_plots: out/classical_validation_plots
+
+models:
+  newton:
+    method: RK4 fixed-step
+    state0: [x, y, vx, vy]
+    metrics:
+      - energy_rel_drift
+      - h_rel_drift
+    status: [BOUND, UNBOUND]
+  schwarzschild_equatorial:
+    method: RK4 fixed-step (tau)
+    inputs: [M, E, L, r0, phi0, pr0]
+    events: [periapse, apoapse, r_cap, horizon]
+    diagnostics:
+      - epsilon = pr^2 + Veff(r) - E^2
+      - norm_u_theory (g(u,u)+1)
+      - time checks (tcoord/vcoord, dt/dtau, dv/dtau)
+
+validation_targets:
+  classical_schwarzschild:
+    perihelion_precession:
+      uses: periapse events
+      output: delta_phi_per_orbit + plot
+    isco:
+      criterion: stability changes near r ~ 6M
+      output: stable vs capture + r(tau) plots

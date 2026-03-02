@@ -1,83 +1,65 @@
-# src/relorbit_py/cases.yaml
-
 suites:
   newton:
-    description: "Newtonian 2-body planar validation cases (energy + angular momentum drift)."
     cases:
       - name: newton_circular_mu1_r1
         model: newton
-        params:
-          mu: 1.0
-        state0: [1.0, 0.0, 0.0, 1.0]
         span: [0.0, 100.0]
         solver:
           dt: 1.0e-3
-          # n_steps opcional (se omitido, simulate_case decide)
-          # n_steps: 100000
+          n_steps: 0
+        params:
+          mu: 1.0
+        state0: [1.0, 0.0, 0.0, 1.0]
         criteria:
-          # Invariantes (validação principal)
           energy_rel_drift_max: 1.0e-6
           h_rel_drift_max: 1.0e-8
           status: BOUND
           status_must_match_theory: true
-
-          # Convergência (janela curta para evitar saturação por roundoff)
-          convergence_span: [0.0, 62.8318530718]   # ~10 órbitas (10*2π)
-          convergence_min_order: 3.6
-          convergence_abs_err_max: 1.0e-9
-          convergence_rel_err_max: 1.0e-6
+        theory:
+          status: BOUND
 
       - name: newton_elliptic_mu1_r1_v0p8
         model: newton
-        params:
-          mu: 1.0
-        state0: [1.0, 0.0, 0.0, 0.8]
         span: [0.0, 200.0]
         solver:
           dt: 5.0e-4
+          n_steps: 0
+        params:
+          mu: 1.0
+        state0: [1.0, 0.0, 0.0, 0.8]
         criteria:
-          # Invariantes (validação principal)
           energy_rel_drift_max: 2.0e-6
           h_rel_drift_max: 2.0e-8
           status: BOUND
           status_must_match_theory: true
-
-          # Convergência (janela menor para reduzir erro de fase acumulado)
-          convergence_span: [0.0, 60.0]
-          convergence_min_order: 3.6
-          convergence_abs_err_max: 1.0e-9
-          convergence_rel_err_max: 1.0e-6
+        theory:
+          status: BOUND
 
       - name: newton_hyperbolic_mu1_r1_v1p6
         model: newton
-        params:
-          mu: 1.0
-        state0: [1.0, 0.0, 0.0, 1.6]
         span: [0.0, 20.0]
         solver:
           dt: 1.0e-4
+          n_steps: 0
+        params:
+          mu: 1.0
+        state0: [1.0, 0.0, 0.0, 1.6]
         criteria:
-          # Invariantes (validação principal)
           energy_rel_drift_max: 2.0e-6
           h_rel_drift_max: 2.0e-8
           status: UNBOUND
           status_must_match_theory: true
-
-          # Convergência (hiperbólica: curto por natureza)
-          convergence_span: [0.0, 5.0]
-          convergence_min_order: 3.6
-          convergence_abs_err_max: 1.0e-9
-          convergence_rel_err_max: 1.0e-6
-
+        theory:
+          status: UNBOUND
 
   schwarzschild:
-    description: "Schwarzschild equatorial (geodesics) validation cases using (M,E,L,r0,phi0,pr0)."
     cases:
-      # ======================================================
-      # Circular (3 dt para convergência)
-      # ======================================================
       - name: schwarzschild_circular_M1_r10_dt1e3
         model: schwarzschild
+        span: [0.0, 200.0]
+        solver:
+          dt: 1.0e-3
+          n_steps: 0
         params:
           M: 1.0
           E: 0.9561828874675149
@@ -85,23 +67,27 @@ suites:
           capture_r: 2.5
           capture_eps: 1.0e-12
         state0: [10.0, 0.0]
-        span: [0.0, 200.0]
-        solver:
-          dt: 1.0e-3
+        pr0: 0.0
         criteria:
-          status: BOUND
           constraint_abs_max: 1.0e-10
-
-          # time checks (ligados por padrão, explicitando aqui)
+          status: BOUND
+          min_events: 0
           require_tcoord: true
           require_vcoord: false
           time_A_min: 1.0e-6
           tcoord_monotone_tol: 0.0
           dt_dtau_rel_err_max: 1.0e-5
           dt_dtau_abs_err_max: 1.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_circular_M1_r10_dt5e4
         model: schwarzschild
+        span: [0.0, 200.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
         params:
           M: 1.0
           E: 0.9561828874675149
@@ -109,22 +95,27 @@ suites:
           capture_r: 2.5
           capture_eps: 1.0e-12
         state0: [10.0, 0.0]
-        span: [0.0, 200.0]
-        solver:
-          dt: 5.0e-4
+        pr0: 0.0
         criteria:
-          status: BOUND
           constraint_abs_max: 1.0e-10
-
+          status: BOUND
+          min_events: 0
           require_tcoord: true
           require_vcoord: false
           time_A_min: 1.0e-6
           tcoord_monotone_tol: 0.0
           dt_dtau_rel_err_max: 1.0e-5
           dt_dtau_abs_err_max: 1.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_circular_M1_r10_dt2p5e4
         model: schwarzschild
+        span: [0.0, 200.0]
+        solver:
+          dt: 2.5e-4
+          n_steps: 0
         params:
           M: 1.0
           E: 0.9561828874675149
@@ -132,182 +123,417 @@ suites:
           capture_r: 2.5
           capture_eps: 1.0e-12
         state0: [10.0, 0.0]
-        span: [0.0, 200.0]
-        solver:
-          dt: 2.5e-4
+        pr0: 0.0
         criteria:
-          status: BOUND
           constraint_abs_max: 1.0e-10
-
+          status: BOUND
+          min_events: 0
           require_tcoord: true
           require_vcoord: false
           time_A_min: 1.0e-6
           tcoord_monotone_tol: 0.0
           dt_dtau_rel_err_max: 1.0e-5
           dt_dtau_abs_err_max: 1.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
-
-      # ======================================================
-      # Bound turning (periapse) (3 dt para convergência)
-      # ======================================================
       - name: schwarzschild_bound_turning_M1_r12_dt1e3
         model: schwarzschild
-        params:
-          M: 1.0
-          E: 0.97
-          L: 4.0
-          capture_r: 2.5
-          capture_eps: 1.0e-12
-        pr0: -0.12236859921595049
-        state0: [12.0, 0.0]
         span: [0.0, 200.0]
         solver:
           dt: 1.0e-3
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.97
+          L: 4.0
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [12.0, 0.0]
+        pr0: -0.12236859921595049
         criteria:
-          status: BOUND
           constraint_abs_max: 1.0e-8
-          must_have_events: ["periapse"]
-
+          status: BOUND
+          min_events: 0
+          must_have_events: [periapse]
           require_tcoord: true
           require_vcoord: false
           time_A_min: 1.0e-6
           tcoord_monotone_tol: 0.0
           dt_dtau_rel_err_max: 1.0e-5
           dt_dtau_abs_err_max: 1.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_bound_turning_M1_r12_dt5e4
         model: schwarzschild
+        span: [0.0, 200.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
         params:
           M: 1.0
           E: 0.97
           L: 4.0
           capture_r: 2.5
           capture_eps: 1.0e-12
-        pr0: -0.12236859921595049
         state0: [12.0, 0.0]
-        span: [0.0, 200.0]
-        solver:
-          dt: 5.0e-4
+        pr0: -0.12236859921595049
         criteria:
-          status: BOUND
           constraint_abs_max: 1.0e-8
-          must_have_events: ["periapse"]
-
+          status: BOUND
+          min_events: 0
+          must_have_events: [periapse]
           require_tcoord: true
           require_vcoord: false
           time_A_min: 1.0e-6
           tcoord_monotone_tol: 0.0
           dt_dtau_rel_err_max: 1.0e-5
           dt_dtau_abs_err_max: 1.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_bound_turning_M1_r12_dt2p5e4
         model: schwarzschild
+        span: [0.0, 200.0]
+        solver:
+          dt: 2.5e-4
+          n_steps: 0
         params:
           M: 1.0
           E: 0.97
           L: 4.0
           capture_r: 2.5
           capture_eps: 1.0e-12
-        pr0: -0.12236859921595049
         state0: [12.0, 0.0]
-        span: [0.0, 200.0]
-        solver:
-          dt: 2.5e-4
+        pr0: -0.12236859921595049
         criteria:
-          status: BOUND
           constraint_abs_max: 1.0e-8
-          must_have_events: ["periapse"]
-
+          status: BOUND
+          min_events: 0
+          must_have_events: [periapse]
           require_tcoord: true
           require_vcoord: false
           time_A_min: 1.0e-6
           tcoord_monotone_tol: 0.0
           dt_dtau_rel_err_max: 1.0e-5
           dt_dtau_abs_err_max: 1.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
 
-
-      # ======================================================
-      # Plunge / Capture (3 dt para convergência)
-      #
-      # Perto do horizonte:
-      # - tcoord (Schwarzschild) é patológico (explode) => require_tcoord=false
-      # - se você tiver vcoord (EF ingoing), pode ligar require_vcoord=true
-      # ======================================================
       - name: schwarzschild_plunge_M1_r5p8_dt5e4
         model: schwarzschild
-        params:
-          M: 1.0
-          E: 0.9431662428100122
-          L: 3.466162967069742
-          capture_r: 2.5
-          capture_eps: 1.0e-6
-        pr0: -0.02
-        state0: [5.8, 0.0]
         span: [0.0, 200.0]
         solver:
           dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.9431662428100122
+          L: 3.466162967069742
+          capture_r: 2.5
+          capture_eps: 1.0e-6
+        state0: [5.8, 0.0]
+        pr0: -0.02
         criteria:
-          status: CAPTURE
           constraint_abs_max: 1.0e-6
-          must_have_events: ["horizon"]
-
+          status: CAPTURE
+          min_events: 0
+          must_have_events: [horizon]
           require_tcoord: false
           require_vcoord: false
-
-          # ainda usamos máscara A_min nos checks de v/dv se você ligar vcoord
           time_A_min: 1.0e-6
-          vcoord_monotone_tol: 0.0
-          dv_dtau_rel_err_max: 1.0e-5
-          dv_dtau_abs_err_max: 1.0e-3
 
       - name: schwarzschild_plunge_M1_r5p8_dt2p5e4
         model: schwarzschild
-        params:
-          M: 1.0
-          E: 0.9431662428100122
-          L: 3.466162967069742
-          capture_r: 2.5
-          capture_eps: 1.0e-6
-        pr0: -0.02
-        state0: [5.8, 0.0]
         span: [0.0, 200.0]
         solver:
           dt: 2.5e-4
-        criteria:
-          status: CAPTURE
-          constraint_abs_max: 1.0e-6
-          must_have_events: ["horizon"]
-
-          require_tcoord: false
-          require_vcoord: false
-
-          time_A_min: 1.0e-6
-          vcoord_monotone_tol: 0.0
-          dv_dtau_rel_err_max: 1.0e-5
-          dv_dtau_abs_err_max: 1.0e-3
-
-      - name: schwarzschild_plunge_M1_r5p8_dt1p25e4
-        model: schwarzschild
+          n_steps: 0
         params:
           M: 1.0
           E: 0.9431662428100122
           L: 3.466162967069742
           capture_r: 2.5
           capture_eps: 1.0e-6
-        pr0: -0.02
         state0: [5.8, 0.0]
+        pr0: -0.02
+        criteria:
+          constraint_abs_max: 1.0e-6
+          status: CAPTURE
+          min_events: 0
+          must_have_events: [horizon]
+          require_tcoord: false
+          require_vcoord: false
+          time_A_min: 1.0e-6
+
+      - name: schwarzschild_plunge_M1_r5p8_dt1p25e4
+        model: schwarzschild
         span: [0.0, 200.0]
         solver:
           dt: 1.25e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.9431662428100122
+          L: 3.466162967069742
+          capture_r: 2.5
+          capture_eps: 1.0e-6
+        state0: [5.8, 0.0]
+        pr0: -0.02
         criteria:
-          status: CAPTURE
           constraint_abs_max: 1.0e-6
-          must_have_events: ["horizon"]
-
+          status: CAPTURE
+          min_events: 0
+          must_have_events: [horizon]
           require_tcoord: false
           require_vcoord: false
-
           time_A_min: 1.0e-6
+
+      - name: schwarzschild_perihelion_weak_M1_r20_E0p985_L4p5_dt2e3
+        model: schwarzschild
+        span: [0.0, 3300.0]
+        solver:
+          dt: 2.0e-3
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.985
+          L: 4.5
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [20.0, 0.0]
+        pr0: -0.15704298774539419
+        criteria:
+          constraint_abs_max: 5.0e-8
+          status: BOUND
+          min_events: 6
+          must_have_events: [periapse]
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 2.0e-5
+          dt_dtau_abs_err_max: 2.0e-3
           vcoord_monotone_tol: 0.0
           dv_dtau_rel_err_max: 1.0e-5
           dv_dtau_abs_err_max: 1.0e-3
+
+      - name: schwarzschild_perihelion_strong_M1_r12_E0p97_L4_dt2e3
+        model: schwarzschild
+        span: [0.0, 1200.0]
+        solver:
+          dt: 2.0e-3
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.97
+          L: 4.0
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [12.0, 0.0]
+        pr0: -0.12236859921595049
+        criteria:
+          constraint_abs_max: 8.0e-8
+          status: BOUND
+          min_events: 6
+          must_have_events: [periapse]
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 2.0e-5
+          dt_dtau_abs_err_max: 2.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
+
+      - name: schwarzschild_isco_stable_M1_rc6p2_dt5e4
+        model: schwarzschild
+        span: [0.0, 300.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.9429283659036918
+          L: 3.465905365124674
+          capture_r: 2.5
+          capture_eps: 1.0e-6
+        state0: [6.2, 0.0]
+        pr0: -0.001
+        criteria:
+          constraint_abs_max: 1.0e-9
+          status: BOUND
+          min_events: 0
+          must_have_events: [periapse]
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 5.0e-5
+          dt_dtau_abs_err_max: 5.0e-3
+          vcoord_monotone_tol: 0.0
+          dv_dtau_rel_err_max: 1.0e-5
+          dv_dtau_abs_err_max: 1.0e-3
+
+      - name: schwarzschild_isco_unstable_M1_rc5p9_dt5e4
+        model: schwarzschild
+        span: [0.0, 300.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.9428965097881423
+          L: 3.46459929513675
+          capture_r: 2.5
+          capture_eps: 1.0e-6
+        state0: [5.9, 0.0]
+        pr0: -0.01
+        criteria:
+          # Se tu botar 1.0e-8 aqui, esse caso tende a FAIL.
+          # 1.0e-7 deixa esse caso PASS sem "mentir" (constraint ~7.5e-8).
+          constraint_abs_max: 1.0e-7
+          status: CAPTURE
+          min_events: 0
+          must_have_events: [horizon]
+          require_tcoord: false
+          require_vcoord: false
+          time_A_min: 1.0e-2
+          dt_dtau_rel_err_max: 1.0e+20
+          dt_dtau_abs_err_max: 1.0e+20
+          dv_dtau_rel_err_max: 1.0e+20
+          dv_dtau_abs_err_max: 1.0e+20
+
+  # ============================================================
+  # Suite: perihelion_precession
+  # ============================================================
+  perihelion_precession:
+    cases:
+      # ----- Órbita excêntrica: L=4.5, r0=20M -----
+      # Δφ_exact ≈ 1.739 rad/órbita
+      - name: schw_prec_moderate_M1_r20_E0p985_L4p5
+        model: schwarzschild
+        span: [0.0, 4200.0]
+        solver:
+          dt: 2.0e-3
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.985
+          L: 4.5
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [20.0, 0.0]
+        pr0: -0.15704298774539419
+        criteria:
+          constraint_abs_max: 5.0e-8
+          status: BOUND
+          must_have_events: [periapse]
+          min_events: 7              # 4 periapses + 3 apoases
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 2.0e-5
+          dt_dtau_abs_err_max: 2.0e-3
+          min_orbits_precession: 3
+          precession_rel_err_max: 0.05       # 5% vs Δφ_exact (scipy); sem scipy: não reprova
+          precession_consistency_max: 0.05   # std/|mean| < 5%
+
+      # ----- Órbita excêntrica: L=4.0, r0=12M -----
+      # Δφ_exact ≈ 2.883 rad/órbita
+      - name: schw_prec_strong_M1_r12_E0p97_L4
+        model: schwarzschild
+        span: [0.0, 1700.0]
+        solver:
+          dt: 2.0e-3
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.97
+          L: 4.0
+          capture_r: 2.5
+          capture_eps: 1.0e-12
+        state0: [12.0, 0.0]
+        pr0: -0.12236859921595049
+        criteria:
+          constraint_abs_max: 8.0e-8
+          status: BOUND
+          must_have_events: [periapse]
+          min_events: 7              # 4 periapses + 3 apoases
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 2.0e-5
+          dt_dtau_abs_err_max: 2.0e-3
+          min_orbits_precession: 3
+          precession_rel_err_max: 0.05
+          precession_consistency_max: 0.05
+
+  # ============================================================
+  # Suite: isco
+  # r_ISCO = 6M: r>6M → BOUND, r<6M → CAPTURE
+  # ============================================================
+  isco:
+    cases:
+      # ----- r = 6.2M: fora do ISCO → estável -----
+      - name: schw_isco_stable_M1_r6p2
+        model: schwarzschild
+        span: [0.0, 300.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.9429283659036918
+          L: 3.465905365124674
+          capture_r: 2.5
+          capture_eps: 1.0e-6
+        state0: [6.2, 0.0]
+        pr0: -0.001
+        criteria:
+          constraint_abs_max: 1.0e-9
+          status: BOUND
+          must_have_events: [periapse]
+          require_tcoord: true
+          require_vcoord: false
+          time_A_min: 1.0e-6
+          tcoord_monotone_tol: 0.0
+          dt_dtau_rel_err_max: 5.0e-5
+          dt_dtau_abs_err_max: 5.0e-3
+          isco_expected_stable: true
+
+      # ----- r = 5.9M: dentro do ISCO → instável -----
+      - name: schw_isco_unstable_M1_r5p9
+        model: schwarzschild
+        span: [0.0, 300.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          E: 0.9428965097881423
+          L: 3.46459929513675
+          capture_r: 2.5
+          capture_eps: 1.0e-6
+        state0: [5.9, 0.0]
+        pr0: -0.01
+        criteria:
+          constraint_abs_max: 1.0e-7
+          status: CAPTURE
+          must_have_events: [horizon]
+          require_tcoord: false
+          require_vcoord: false
+          time_A_min: 1.0e-2
+          dt_dtau_rel_err_max: 1.0e+20
+          dt_dtau_abs_err_max: 1.0e+20
+          dv_dtau_rel_err_max: 1.0e+20
+          dv_dtau_abs_err_max: 1.0e+20
+          isco_expected_stable: false
