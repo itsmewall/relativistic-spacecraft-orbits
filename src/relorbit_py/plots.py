@@ -98,6 +98,7 @@ def plot_newton(
     plt.figure()
     plt.semilogy(t, dE_rel_plot, label="|E - E0| / max(|E0|,1)")
     plt.semilogy(t, dh_rel_plot, label="|h - h0| / max(|h0|,1)")
+    plt.ylim(bottom=eps_floor)
     plt.axhline(
         float(energy_rel_drift_max),
         linestyle="--",
@@ -195,6 +196,7 @@ def _plot_schw_time_pack(
             plt.semilogy(tau, np.maximum(np.abs(dt_dtau_fd), eps_floor), label="|dt/dtau| (FD)")
         if dt_dtau_theory is not None:
             plt.semilogy(tau, np.maximum(np.abs(dt_dtau_theory), eps_floor), label="|dt/dtau| (theory)")
+        plt.ylim(bottom=eps_floor)
         plt.xlabel("tau")
         plt.ylabel("|dt/dtau| (log)")
         plt.title(f"Time dilation factor |dt/dtau| (log): {case_name}")
@@ -263,6 +265,7 @@ def _plot_schw_classical_validation(
 
         plt.figure()
         plt.semilogy(tau, np.maximum(np.abs(dr), eps_floor), label="|r - r0|")
+        plt.ylim(bottom=eps_floor)
         plt.xlabel("tau")
         plt.ylabel("|r-r0| (log)")
         plt.title(f"Stability near ISCO: |r-r0| (log) | {case_name}")
@@ -343,6 +346,7 @@ def _plot_schw_classical_validation(
             # versão log do módulo (útil se Δφ for pequeno)
             plt.figure()
             plt.semilogy(k, np.maximum(np.abs(delta_phi), eps_floor), marker="o", label="|Δφ|")
+            plt.ylim(bottom=eps_floor)
             plt.xlabel("orbit index k")
             plt.ylabel("|Δφ| (rad, log)")
             plt.title(f"Perihelion precession magnitude (log): {case_name}")
@@ -404,6 +408,7 @@ def plot_schw(
 
     plt.figure()
     plt.semilogy(tau, abs_eps_plot, label="|epsilon(tau)|")
+    plt.ylim(bottom=eps_floor)
     plt.axhline(float(constraint_abs_max), linestyle="--", label=f"crit constraint_abs_max={constraint_abs_max:.1e}")
     plt.xlabel("tau")
     plt.ylabel("|epsilon| (log)")
@@ -431,6 +436,7 @@ def plot_schw(
             abs_nu_plot = np.maximum(np.abs(nu), eps_floor)
             plt.figure()
             plt.semilogy(tau, abs_nu_plot, label="|norm_u|")
+            plt.ylim(bottom=eps_floor)
             plt.xlabel("tau")
             plt.ylabel("|norm_u| (log)")
             plt.title(f"4-velocity normalization drift (log): {case_name}")

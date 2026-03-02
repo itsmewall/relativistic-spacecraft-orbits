@@ -17,6 +17,7 @@ def plot_schw_time(
     vt_num: Optional[np.ndarray],
     vt_th: Optional[np.ndarray],
     outdir_time: str,
+    eps_floor: float = 1e-16,
 ) -> None:
     """
     Pacote de plots de tempo (t Schwarzschild e v EF):
@@ -78,19 +79,20 @@ def plot_schw_time(
         plt.xlabel("tau")
         plt.ylabel("dt/dtau")
         plt.title(f"{case_name}: dt/dτ (num vs theory)")
-        plt.legend()
+        plt.legend(loc="upper right")
         plt.tight_layout()
         plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_overlay.png"), dpi=150)
         plt.close()
 
         plt.figure()
-        plt.plot(tau, np.abs(ut_num) + 1e-300, label="|num|")
-        plt.plot(tau, np.abs(ut_th) + 1e-300, label="|theory|")
+        plt.plot(tau, np.maximum(np.abs(ut_num), eps_floor), label="|num|")
+        plt.plot(tau, np.maximum(np.abs(ut_th), eps_floor), label="|theory|")
         plt.yscale("log")
+        plt.ylim(bottom=eps_floor)
         plt.xlabel("tau")
         plt.ylabel("|dt/dtau| (log)")
         plt.title(f"{case_name}: |dt/dτ| (log)")
-        plt.legend()
+        plt.legend(loc="upper right")
         plt.tight_layout()
         plt.savefig(os.path.join(outdir_time, f"{case_name}_dt_dtau_log.png"), dpi=150)
         plt.close()
@@ -98,8 +100,9 @@ def plot_schw_time(
         with np.errstate(divide="ignore", invalid="ignore"):
             rel = np.abs((ut_num - ut_th) / np.maximum(np.abs(ut_th), 1e-300))
         plt.figure()
-        plt.plot(tau, rel + 1e-300)
+        plt.plot(tau, np.maximum(rel, eps_floor))
         plt.yscale("log")
+        plt.ylim(bottom=eps_floor)
         plt.xlabel("tau")
         plt.ylabel("rel_err |(ut_num-ut_th)/ut_th| (log)")
         plt.title(f"{case_name}: rel error dt/dτ (log)")
@@ -115,19 +118,20 @@ def plot_schw_time(
         plt.xlabel("tau")
         plt.ylabel("dv/dtau")
         plt.title(f"{case_name}: dv/dτ (num vs theory)")
-        plt.legend()
+        plt.legend(loc="upper right")
         plt.tight_layout()
         plt.savefig(os.path.join(outdir_time, f"{case_name}_dv_dtau_overlay.png"), dpi=150)
         plt.close()
 
         plt.figure()
-        plt.plot(tau, np.abs(vt_num) + 1e-300, label="|num|")
-        plt.plot(tau, np.abs(vt_th) + 1e-300, label="|theory|")
+        plt.plot(tau, np.maximum(np.abs(vt_num), eps_floor), label="|num|")
+        plt.plot(tau, np.maximum(np.abs(vt_th), eps_floor), label="|theory|")
         plt.yscale("log")
+        plt.ylim(bottom=eps_floor)
         plt.xlabel("tau")
         plt.ylabel("|dv/dtau| (log)")
         plt.title(f"{case_name}: |dv/dτ| (log)")
-        plt.legend()
+        plt.legend(loc="upper right")
         plt.tight_layout()
         plt.savefig(os.path.join(outdir_time, f"{case_name}_dv_dtau_log.png"), dpi=150)
         plt.close()
@@ -135,8 +139,9 @@ def plot_schw_time(
         with np.errstate(divide="ignore", invalid="ignore"):
             rel = np.abs((vt_num - vt_th) / np.maximum(np.abs(vt_th), 1e-300))
         plt.figure()
-        plt.plot(tau, rel + 1e-300)
+        plt.plot(tau, np.maximum(rel, eps_floor))
         plt.yscale("log")
+        plt.ylim(bottom=eps_floor)
         plt.xlabel("tau")
         plt.ylabel("rel_err |(vt_num-vt_th)/vt_th| (log)")
         plt.title(f"{case_name}: rel error dv/dτ (log)")
