@@ -1,4 +1,6 @@
-CORREÇÕES
+# TASKLIST 
+
+## CORREÇÕES
 
     1. Declarar convenções e unidades (obrigatório de banca) 🆗
 
@@ -53,9 +55,9 @@ CORREÇÕES
         * gera `out/report.json`.
         * Critério: qualquer máquina roda igual, sem “passos mágicos”.
 
-FEATURES (P1/P2 — para “botar pra quebrar” no TCC)
+## FEATURES
 
-A - Física GR de alto nível (P1)
+### A - Física GR de alto nível (P1) 🆗
 
     1. Schwarzschild completo (expor também t(τ)) 🆗
 
@@ -74,13 +76,13 @@ A - Física GR de alto nível (P1)
         * Onde: novos casos em YAML e validação em `validate.py`.
         * Critério: seus resultados reproduzem tendências esperadas e você consegue citar o valor e mostrar plot/medida.
 
-    3. Kerr equatorial (P1/P2)
+    3. Kerr equatorial (P1/P2) 🆗
 
         * Implementar geodésicas equatoriais em Kerr: prograde vs retrograde.
         * Onde: novo header `src_cpp/include/relorbit/models/kerr_equatorial.hpp`, nova função no engine e pybind.
         * Critério: plots mostrando diferença prograde/retrograde (frame dragging).
 
-B - Missão e propulsão (P1)
+### B - Missão e propulsão (P1)
 
     4. Manobras impulsivas (Δv)
         * Implementar em nível “missão”: aplicar Δv em instantes/eventos (ex.: no periapse).
@@ -97,7 +99,7 @@ B - Missão e propulsão (P1)
     * GR: ao menos targeting numérico por shooting (varrer E/L ou Δv até atingir um periapse-alvo).
     * Critério: dado um alvo (r_p desejado), o solver encontra parâmetros e reporta erro final.
 
-C - Atitude 6-DOF e GNC (P1)
+### C - Atitude 6-DOF e GNC (P1)
 
     7. Dinâmica de atitude com quaternions
         * Estado: q (4) + ω (3). Equações padrão.
