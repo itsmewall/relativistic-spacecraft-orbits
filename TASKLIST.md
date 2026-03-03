@@ -102,21 +102,21 @@
 
 ### B - Missão e propulsão (P1)
 
-    #### 4. Manobras impulsivas ($\Delta v$) e Gerenciamento de Massa
+    #### 4. Manobras impulsivas ($\Delta v$) e Gerenciamento de Massa 🆗
 
     * Implementação: Aplicar saltos instantâneos no vetor de estado $[p_r, L]$.
     * Novidade: Introduzir a **massa da sonda ($m$)** como variável. Cada $\Delta v$ deve calcular o consumo de combustível pela Equação de Tsiolkovsky: $\Delta m = m_{atual} \cdot (1 - e^{-\Delta v / (I_{sp} \cdot g_0)})$.
     * Onde: Lógica de consumo no Python (`mission.py`) integrando com as unidades do `units.py`.
     * Critério: Tabela de "Delta-v Budget" e "Mass Budget". A simulação deve falhar se o combustível acabar antes da manobra final.
 
-    #### 5. Low-thrust (thrust contínuo) + Dinâmica Não-Geodésica
+    #### 5. Low-thrust (thrust contínuo) + Dinâmica Não-Geodésica 🆗
 
     * Modelo: Adicionar um termo de força própria $f^\mu$ (aceleração do motor) nas equações diferenciais. A trajetória deixa de ser uma geodésica pura (queda livre) e passa a ser uma **geodésica forçada**.
     * Novidade: Implementar o empuxo em componentes: *Radial* (para mudar a excentricidade rapidamente) e Tangencial (para ganhar energia orbital/subir a órbita).
     * Onde: Novo integrador em C++ que aceita um parâmetro `thrust_vector` e `Isp`.
     * Critério: Demonstração de **Orbit Raising** (subida em espiral). Comparar o tempo de subida de $6M$ para $10M$ usando diferentes níveis de aceleração.
 
-    #### 6. Planejamento e Targeting (Targeting Numérico)
+    #### 6. Planejamento e Targeting (Targeting Numérico) 
 
     * Lambert Relativístico: Como não há solução fechada, implementar um **Solver de Shooting** (Bisseção ou Newton-Raphson) em Python.
     * Cenário de Missão: "Dado que estou em $r=20M$, qual $\Delta v$ devo aplicar para que meu periapse seja exatamente $3M$ (limite da ISCO de Schwarzschild)?"
