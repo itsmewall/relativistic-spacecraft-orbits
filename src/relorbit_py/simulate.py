@@ -1,15 +1,12 @@
 # src/relorbit_py/simulate.py
 from __future__ import annotations
-
 from pathlib import Path
 from typing import Any, Dict, Tuple
-
 import yaml
 import relorbit_py as rp
 
 
-def load_cases_yaml(path: str | Path) -> Dict[str, Any]:
-    """Carrega o arquivo de configuração (cases.yaml ou mission.yaml)."""
+def load_cases_yaml(path):
     path = Path(path)
     with path.open("r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -18,8 +15,7 @@ def load_cases_yaml(path: str | Path) -> Dict[str, Any]:
     return cfg
 
 
-def _get_solver_field(case: Dict[str, Any], key: str, default: Any = None) -> Any:
-    """Busca campos no bloco 'solver' ou na raiz do caso para retrocompatibilidade."""
+def _get_solver_field(case, key, default=None):
     if isinstance(case.get("solver"), dict) and key in case["solver"]:
         return case["solver"][key]
     if key in case:
@@ -27,146 +23,157 @@ def _get_solver_field(case: Dict[str, Any], key: str, default: Any = None) -> An
     return default
 
 
-def _get_span(case: Dict[str, Any]) -> Tuple[float, float]:
-    """Extrai o intervalo de tempo (span) suportando formatos novos e legados."""
+def _get_span(case):
     if "span" in case:
-        a, b = case["span"]
-        return float(a), float(b)
+        a, b = case["span"]; return float(a), float(b)
     if "t0" in case and "tf" in case:
         return float(case["t0"]), float(case["tf"])
     if "tau0" in case and "tauf" in case:
         return float(case["tau0"]), float(case["tauf"])
-    raise KeyError(
-        f"span ausente no caso '{case.get('name','<sem-nome>')}'. "
-        "Esperado case.span=[a,b] (novo) ou (t0,tf)/(tau0,tauf) (legado)."
-    )
+    raise KeyError(f"span ausente no caso '{case.get('name','?')}'.")
 
 
-def _setup_maneuvers(case: Dict[str, Any], cfg: Any) -> None:
-    """
-    Traduz a lista de manobras do YAML para objetos C++ Maneuver.
-    Essencial para o planejamento de missões (Item 4 do Plano de Ação).
-    """
+def _setup_maneuvers(case, cfg):
     eng = rp.get_engine()
-    # Busca manobras no bloco solver ou na raiz do caso
     maneuver_list = _get_solver_field(case, "maneuvers", [])
-    
     if not isinstance(maneuver_list, list):
         return
-
     for m_data in maneuver_list:
         m = eng.Maneuver()
-        m.tau = float(m_data.get("tau", 0.0))
-        m.dv_r = float(m_data.get("dv_r", 0.0))
+        m.tau    = float(m_data.get("tau", 0.0))
+        m.dv_r   = float(m_data.get("dv_r", 0.0))
         m.dv_phi = float(m_data.get("dv_phi", 0.0))
         cfg.maneuvers.append(m)
 
 
-def _make_solver_cfg(case: Dict[str, Any]) -> Any:
-    """Cria e configura o objeto SolverCfg para a engine C++."""
+def _make_solver_cfg(case):
     eng = rp.get_engine()
     cfg = eng.SolverCfg()
-
     dt = _get_solver_field(case, "dt", None)
     if dt is None:
-        raise KeyError(
-            f"dt ausente no caso '{case.get('name','<sem-nome>')}'. "
-            "Esperado em case.solver.dt ou case.dt."
-        )
+        raise KeyError(f"dt ausente no caso '{case.get('name','?')}'.")
     cfg.dt = float(dt)
-
     n_steps = _get_solver_field(case, "n_steps", 0)
-    cfg.n_steps = int(n_steps) if n_steps is not None else 0
-    
-    # Risco 1: Stride para economia de RAM em missões longas
+    cfg.n_steps = int(n_steps) if n_steps else 0
     re = _get_solver_field(case, "record_every", 1)
-    cfg.record_every = int(re) if re is not None else 1
-    
-    # Item 4: Configuração de manobras impulsivas
+    cfg.record_every = int(re) if re else 1
     _setup_maneuvers(case, cfg)
-    
     return cfg
 
 
-def _pick_pr0(case: Dict[str, Any], params: Dict[str, Any]) -> float:
-    """Define o momento radial inicial (pr0) com base em prioridades ou direção."""
-    if "pr0" in case:
-        return float(case["pr0"])
-    if "pr0" in params:
-        return float(params["pr0"])
+def _pick_pr0(case, params):
+    if "pr0" in case:   return float(case["pr0"])
+    if "pr0" in params: return float(params["pr0"])
+    rd = str(case.get("radial_dir", params.get("radial_dir", "")) or "").strip().lower()
+    if rd in ("in","inbound","fall","plunge","-1","neg","negative"): return -0.02
+    if rd in ("out","outbound","+1","pos","positive"):               return +0.02
+    return 0.0
 
-    radial_dir = case.get("radial_dir", params.get("radial_dir", None))
-    if radial_dir is None:
-        return 0.0
 
-    rd = str(radial_dir).strip().lower()
-    if rd in ("in", "inbound", "fall", "plunge", "-1", "neg", "negative"):
-        return -0.02
-    if rd in ("out", "outbound", "+1", "pos", "positive"):
-        return +0.02
-
-    raise ValueError(f"radial_dir inválido no caso '{case.get('name','<sem-nome>')}': {radial_dir}")
+def _make_thrust_cfg(thrust_raw: Dict[str, Any]) -> Any:
+    """Traduz o bloco 'thrust:' do YAML para um objeto ThrustCfg C++."""
+    eng = rp.get_engine()
+    thr = eng.ThrustCfg()
+    thr.F_r         = float(thrust_raw.get("F_r",         0.0))
+    thr.F_phi       = float(thrust_raw.get("F_phi",       0.0))
+    thr.isp_s       = float(thrust_raw.get("isp_s",       3000.0))
+    thr.mass0_kg    = float(thrust_raw.get("mass0_kg",    1000.0))
+    thr.dry_mass_kg = float(thrust_raw.get("dry_mass_kg", 300.0))
+    thr.tau_on      = float(thrust_raw.get("tau_on",      0.0))
+    thr.tau_off     = float(thrust_raw.get("tau_off",     1e18))
+    mode_str = str(thrust_raw.get("mode", "CONSTANT")).upper().replace(" ", "_")
+    thr.mode = getattr(eng.ThrustMode, mode_str, eng.ThrustMode.CONSTANT)
+    return thr
 
 
 def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
-    """Ponto de entrada principal para rodar uma simulação (Newton, Schwarzschild ou Kerr)."""
     eng = rp.get_engine()
-
-    model = case.get("model", suite_name)
-    cfg = _make_solver_cfg(case)
+    model  = case.get("model", suite_name)
+    cfg    = _make_solver_cfg(case)
     a0, af = _get_span(case)
 
-    # 1. Modelo Newtoniano
+    # ── Newton ────────────────────────────────────────────────
     if model == "newton":
         params = case.get("params", {}) or {}
-        mu = float(params.get("mu", case.get("mu", 1.0)))
-        state0 = case["state0"]
-        t0, tf = a0, af
-        return eng.simulate_newton_rk4(mu, state0, t0, tf, cfg)
+        mu     = float(params.get("mu", case.get("mu", 1.0)))
+        return eng.simulate_newton_rk4(mu, case["state0"], a0, af, cfg)
 
-    # 2. Modelo Schwarzschild
+    # ── Schwarzschild geodésica ───────────────────────────────
     if model in ("schwarzschild", "schwarzschild_equatorial"):
         params = case.get("params", {}) or {}
         M = float(params.get("M", case.get("M", 1.0)))
         E = float(params.get("E", case.get("E")))
         L = float(params.get("L", case.get("L")))
-
         state0 = case.get("state0", None)
         if not isinstance(state0, list) or len(state0) < 2:
-            raise ValueError(f"state0 inválido para Schwarzschild em '{case.get('name')}'.")
-
+            raise ValueError(f"state0 inválido em '{case.get('name')}'.")
         r0, phi0 = float(state0[0]), float(state0[1])
         pr0 = _pick_pr0(case, params)
-        capture_r = float(params.get("capture_r", 2.0))
+        capture_r   = float(params.get("capture_r",   2.0))
         capture_eps = float(params.get("capture_eps", 1e-12))
-
         return eng.simulate_schwarzschild_equatorial_rk4(
             M=M, E=E, L=L, r0=r0, phi0=phi0, pr0=pr0,
             tau0=a0, tauf=af, cfg=cfg,
-            capture_r=capture_r, capture_eps=capture_eps
-        )
+            capture_r=capture_r, capture_eps=capture_eps)
 
-    # 3. Modelo Kerr
+    # ── Kerr geodésica ────────────────────────────────────────
     if model in ("kerr", "kerr_equatorial"):
         params = case.get("params", {}) or {}
-        M = float(params.get("M", case.get("M", 1.0)))
-        a = float(params.get("a", case.get("a", 0.0)))
-        E = float(params.get("E", case.get("E")))
-        L = float(params.get("L", case.get("L")))
-
+        M   = float(params.get("M", case.get("M", 1.0)))
+        a   = float(params.get("a", case.get("a", 0.0)))
+        E   = float(params.get("E", case.get("E")))
+        L   = float(params.get("L", case.get("L")))
         state0 = case.get("state0", None)
         if not isinstance(state0, list) or len(state0) < 2:
-            raise ValueError(f"state0 inválido para Kerr em '{case.get('name')}'.")
-
+            raise ValueError(f"state0 inválido em '{case.get('name')}'.")
         r0, phi0 = float(state0[0]), float(state0[1])
         pr0 = _pick_pr0(case, params)
-        capture_r = float(params.get("capture_r", 2.0))
+        capture_r   = float(params.get("capture_r",   2.0))
         capture_eps = float(params.get("capture_eps", 1e-12))
-
         return eng.simulate_kerr_equatorial_rk4(
             M=M, a=a, E=E, L=L, r0=r0, phi0=phi0, pr0=pr0,
             tau0=a0, tauf=af, cfg=cfg,
-            capture_r=capture_r, capture_eps=capture_eps
-        )
+            capture_r=capture_r, capture_eps=capture_eps)
+
+    # ── Schwarzschild Low-Thrust ──────────────────────────────
+    if model in ("schwarzschild_lowthrust", "schwarzschild_lt"):
+        params = case.get("params", {}) or {}
+        M   = float(params.get("M", 1.0))
+        E   = float(params.get("E", case.get("E")))
+        L   = float(params.get("L", case.get("L")))
+        state0 = case.get("state0", None)
+        if not isinstance(state0, list) or len(state0) < 2:
+            raise ValueError(f"state0 inválido em '{case.get('name')}'.")
+        r0, phi0 = float(state0[0]), float(state0[1])
+        pr0 = _pick_pr0(case, params)
+        capture_r   = float(params.get("capture_r",   2.0))
+        capture_eps = float(params.get("capture_eps", 1e-12))
+        thrust_raw  = case.get("thrust", {}) or {}
+        thr = _make_thrust_cfg(thrust_raw)
+        return eng.simulate_schwarzschild_lowthrust_rk4(
+            M=M, E0=E, L0=L, r0=r0, phi0=phi0, pr0=pr0,
+            tau0=a0, tauf=af, thrust=thr, cfg=cfg,
+            capture_r=capture_r, capture_eps=capture_eps)
+
+    # ── Kerr Low-Thrust ───────────────────────────────────────
+    if model in ("kerr_lowthrust", "kerr_lt"):
+        params = case.get("params", {}) or {}
+        M   = float(params.get("M", 1.0))
+        a   = float(params.get("a", 0.0))
+        E   = float(params.get("E", case.get("E")))
+        L   = float(params.get("L", case.get("L")))
+        state0 = case.get("state0", None)
+        if not isinstance(state0, list) or len(state0) < 2:
+            raise ValueError(f"state0 inválido em '{case.get('name')}'.")
+        r0, phi0 = float(state0[0]), float(state0[1])
+        pr0 = _pick_pr0(case, params)
+        capture_r   = float(params.get("capture_r",   2.0))
+        capture_eps = float(params.get("capture_eps", 1e-12))
+        thrust_raw  = case.get("thrust", {}) or {}
+        thr = _make_thrust_cfg(thrust_raw)
+        return eng.simulate_kerr_lowthrust_rk4(
+            M=M, a=a, E0=E, L0=L, r0=r0, phi0=phi0, pr0=pr0,
+            tau0=a0, tauf=af, thrust=thr, cfg=cfg,
+            capture_r=capture_r, capture_eps=capture_eps)
 
     raise ValueError(f"Modelo desconhecido: {model}")

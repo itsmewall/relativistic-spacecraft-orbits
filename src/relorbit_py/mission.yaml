@@ -1,33 +1,11 @@
 # mission.yaml — Planejamento de Missões RelOrbit
 # Unidades: Geométricas (G=c=1) para órbitas; SI [kg, m/s, s] para massa e propulsão.
-#
-# Campos de propulsão (opcionais):
-#   mass0     — massa total inicial [kg] (sonda seca + combustível)
-#   dry_mass  — massa seca [kg] (padrão: 30% de mass0)
-#   isp_s     — impulso específico [s] (ausente → geodésica pura, sem consumo de massa)
-#
-# Campos de manobra:
-#   tau       — tempo próprio da queima [M]
-#   dv_r      — kick radial em pr = dr/dτ (adimensional em G=c=1)
-#   dv_phi    — kick tangencial em L (momento angular específico, G=c=1)
-#   dv_ms     — Δv físico para Tsiolkovsky [m/s] (opcional; estimado se ausente)
-#
-# Se dv_ms não for fornecido, é estimado como:
-#   Δv_ms = sqrt((dv_r*c)² + (dv_phi*c/r_burn)²)   [pior caso relativístico]
 
 missions:
 
   # ============================================================
-  # Missão 1: Transferência de Hohmann Relativística
-  # Saída da órbita circular em r=10M → descida até r≈6M (ISCO)
-  #
-  # Física da manobra:
-  #   Burn 1 (τ=50): reduz L → inicia elipse de transferência
-  #   Burn 2 (τ=150): reduz L novamente → circularização no periapse
-  #
-  # Parâmetros para órbita circular em r=10M (Schwarzschild):
-  #   E_circ = (1-2M/r)/sqrt(1-3M/r) ≈ 0.9435
-  #   L_circ = sqrt(M*r)/sqrt(1-3M/r) ≈ 3.5136
+  # MISSÃO 1: Transferência de Hohmann Relativística
+  # Objetivo: Validação do Item 4 (Manobras Impulsivas e Massa)
   # ============================================================
   - name: "Transferencia_Hohmann_Relativistica"
     description: "Saída de r=10M para r≈6M em Schwarzschild com queima de combustível"
@@ -38,36 +16,24 @@ missions:
       L: 3.5136    # L circular r=10M
       capture_r: 2.05
       capture_eps: 1.0e-9
-    state0: [10.0, 0.0]   # [r0, phi0]
+    state0: [10.0, 0.0]
     pr0: 0.0
-
-    # Propulsão
-    mass0:    1000.0   # [kg] massa total (seca + combustível)
-    dry_mass:  300.0   # [kg] massa seca (padrão = 30%)
-    isp_s:    3000.0   # [s]  impulso específico (v_eff ≈ 29.4 km/s)
-
-    span: [0.0, 600.0]  # τ_ini=0, τ_fim=600M
-
+    mass0:    1000.0   
+    dry_mass:  300.0   
+    isp_s:    3000.0   
+    span: [0.0, 600.0]
     solver:
       dt: 0.01
       record_every: 5
       maneuvers:
-        # Burn 1: kick retrógrado tangencial em τ=50 para iniciar descida
-        - tau: 50.0
-          dv_r: 0.0
-          dv_phi: -0.10    # ΔL = -0.10 (reduz velocidade angular)
-          dv_ms: 400.0     # Δv explícito [m/s] → consumo ≈ 12.4 kg a Isp=3000s
-
-        # Burn 2: circularização próximo do periapse (~r=6M)
-        - tau: 200.0
-          dv_r: 0.0
-          dv_phi: -0.08
-          dv_ms: 320.0     # Δv explícito [m/s] → consumo ≈  9.9 kg
+        # Burn 1: Redução de L para iniciar elipse de transferência
+        - {tau: 50.0,  dv_r: 0.0, dv_phi: -0.10, dv_ms: 400.0}
+        # Burn 2: Circularização no periapse
+        - {tau: 200.0, dv_r: 0.0, dv_phi: -0.08, dv_ms: 320.0}
 
   # ============================================================
-  # Missão 2: Exploração Kerr — órbita geodésica (sem propulsão)
-  # Sonda entra em espiral ao redor de BN de Kerr com spin a=0.9
-  # Sem manobras: trajetória puramente geodésica → isp_s ausente
+  # MISSÃO 2: Exploração Kerr — Geodésica Pura
+  # Objetivo: Observar Frame-Dragging sem interferência de motores
   # ============================================================
   - name: "Exploracao_Kerr_Spin_Alto"
     description: "Aproximação geodésica em BN de Kerr com spin a=0.9M"
@@ -81,43 +47,87 @@ missions:
       capture_eps: 1.0e-9
     state0: [15.0, 0.0]
     pr0: -0.1
-
-    mass0:    500.0     # [kg] (geodésica pura — sem consumo)
-    dry_mass: 150.0     # [kg]
-    # isp_s ausente → sem propulsão, sem consumo de massa
-
+    mass0: 500.0
+    dry_mass: 150.0
     span: [0.0, 1000.0]
-    solver:
-      dt: 0.005
-      record_every: 20
-      maneuvers: []      # Órbita puramente geodésica
+    solver: {dt: 0.005, record_every: 20, maneuvers: []}
 
   # ============================================================
-  # Missão 3: Teste de falha por combustível insuficiente
-  # Δv muito alto para o combustível disponível — deve abortar
+  # MISSÃO 3: Teste de Falha de Combustível
+  # Objetivo: Validar a proteção de software contra falta de recursos
   # ============================================================
   - name: "Missao_Combustivel_Insuficiente"
-    description: "Δv inviável — deve falhar com RuntimeError de combustível"
+    description: "Δv inviável — Deve abortar com erro de combustível"
     model: "schwarzschild_equatorial"
     params:
       M: 1.0
       E: 0.9435
       L: 3.5136
-      capture_r: 2.05
-      capture_eps: 1.0e-9
     state0: [10.0, 0.0]
     pr0: 0.0
-
-    mass0:    200.0    # [kg] massa total pequena
-    dry_mass: 150.0    # [kg] massa seca → apenas 50 kg de combustível
-    isp_s:    3000.0   # [s]
-
+    mass0: 200.0
+    dry_mass: 150.0
+    isp_s: 3000.0
     span: [0.0, 200.0]
     solver:
       dt: 0.01
       record_every: 5
       maneuvers:
-        - tau: 50.0
-          dv_r: 0.0
-          dv_phi: -0.10
-          dv_ms: 50000.0   # 50 km/s — inviável com apenas 50 kg de combustível
+        - {tau: 50.0, dv_r: 0.0, dv_phi: -0.10, dv_ms: 50000.0}
+
+  # ============================================================
+  # MISSÃO 4: Espiral de Escape em Kerr (Alta Potência)
+  # Objetivo: Validar Item 5 (Low-Thrust) com espiral nítida
+  # ============================================================
+  - name: "Espiral_Escape_Kerr_Forte"
+    description: "Saída rápida r=10M→∞ vencendo o Frame-Dragging"
+    model: "kerr_lowthrust"
+    params:
+      M: 1.0
+      a: 0.9
+      E: 0.8932
+      L: 3.1416
+      capture_r: 1.5
+      capture_eps: 1.0e-9
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    span: [0.0, 1500.0] # Tempo reduzido para evitar poluição visual
+    solver:
+      dt: 0.01
+      record_every: 10
+    thrust:
+      F_phi: 8.0e-4      # Força aumentada para gerar espiral aberta
+      F_r:   0.0
+      isp_s: 3000.0
+      mass0_kg:    1000.0
+      dry_mass_kg:  300.0
+      tau_on:  0.0
+      tau_off: 1500.0
+      mode: "TANGENTIAL_ONLY"
+
+  # ============================================================
+  # MISSÃO 5: Descida Controlada em Schwarzschild
+  # Objetivo: Orbit Lowering suave para órbita circular estável
+  # ============================================================
+  - name: "Espiral_Descida_Controlada_Schw"
+    description: "Descida controlada de r=10M para r=6M (ISCO)"
+    model: "schwarzschild_lowthrust"
+    params:
+      M: 1.0
+      E: 0.9435
+      L: 3.5136
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    span: [0.0, 3000.0]
+    solver:
+      dt: 0.005
+      record_every: 50
+    thrust:
+      F_phi: -5.0e-5     # Empuxo retrógrado suave
+      F_r:   0.0
+      isp_s: 3500.0
+      mass0_kg:    1000.0
+      dry_mass_kg:  300.0
+      tau_on:  0.0
+      tau_off: 3000.0
+      mode: "TANGENTIAL_ONLY"

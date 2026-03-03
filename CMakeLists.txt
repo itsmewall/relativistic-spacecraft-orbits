@@ -18,11 +18,13 @@ pybind11_add_module(_engine
   src_cpp/lib/api.cpp
   src_cpp/lib/schwarzschild_equatorial.cpp
   src_cpp/lib/kerr_equatorial.cpp
-
-  # (Opcional, mas bom pro IDE)
+  src_cpp/lib/schwarzschild_lowthrust.cpp  
+  src_cpp/lib/kerr_lowthrust.cpp          
   src_cpp/include/relorbit/types.hpp
   src_cpp/include/relorbit/api.hpp
   src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp
+  src_cpp/include/relorbit/models/schwarzschild_lowthrust.hpp   
+  src_cpp/include/relorbit/models/kerr_lowthrust.hpp            
 )
 
 target_include_directories(_engine PRIVATE
