@@ -1186,160 +1186,6 @@
       ]
     },
     {
-      "suite": "kerr_equatorial",
-      "ok": true,
-      "ok_cases": true,
-      "n_cases": 2,
-      "results": [
-        {
-          "name": "kerr_prograde_M1_a0p9_L3",
-          "passed": true,
-          "status": "OrbitStatus.BOUND",
-          "message": "",
-          "model": "kerr_equatorial",
-          "M": 1.0,
-          "a": 0.9,
-          "E": 0.95,
-          "L": 3.0,
-          "pr0": -0.161992798,
-          "tau0": 0.0,
-          "tauf": 300.0,
-          "dt": 0.0005,
-          "n_steps": 0,
-          "r_min": 4.512647463766921,
-          "r_end": 13.734051427700217,
-          "constraint_abs_max": 6.280006896453028e-11,
-          "norm_u_abs_max": 1.0526468585680959e-10,
-          "norm_u_abs_max_theory": 1.0526468585680959e-10,
-          "norm_u_abs_max_fd": null,
-          "events": [
-            {
-              "kind": "periapse",
-              "tau": 15.03016568152616,
-              "tcoord": 22.57537009270972,
-              "vcoord": 20.20268932098243,
-              "r": 4.512647464180902,
-              "phi": 2.0459779997359244,
-              "pr": 0.0,
-              "i": 0
-            },
-            {
-              "kind": "apoapse",
-              "tau": 119.39329775694472,
-              "tcoord": 148.6898158540559,
-              "vcoord": 159.51005752810659,
-              "r": 14.564142605114403,
-              "phi": 6.638368651375747,
-              "pr": 0.0,
-              "i": 1
-            },
-            {
-              "kind": "periapse",
-              "tau": 223.75642982975882,
-              "tcoord": 274.8042616153988,
-              "vcoord": 272.4315808433262,
-              "r": 4.512647463973932,
-              "phi": 11.230759303015553,
-              "pr": 0.0,
-              "i": 2
-            }
-          ],
-          "events_compact": "periapse@15.0302; apoapse@119.393; periapse@223.756",
-          "tcoord_present": true,
-          "tcoord_finite_ok": true,
-          "tcoord_monotone_ok": true,
-          "dt_dtau_abs_max": null,
-          "dt_dtau_rel_max": null,
-          "time_mask_A_min": 1e-06,
-          "time_mask_n": 600001,
-          "criteria": {
-            "constraint_abs_max": 1e-06,
-            "status": "BOUND",
-            "min_events": 0,
-            "must_have_events": null,
-            "must_not_have_events": null,
-            "require_tcoord": true,
-            "require_vcoord": true,
-            "time_A_min": 1e-06,
-            "tcoord_monotone_tol": 0.0,
-            "dt_dtau_rel_err_max": 0.001,
-            "dt_dtau_abs_err_max": 0.1
-          },
-          "_sig": "{\"E\":0.95,\"L\":3.0,\"M\":1.0,\"a\":0.9,\"capture_eps\":1e-06,\"capture_r\":1.5,\"model\":\"kerr_equatorial\",\"pr0\":-0.161992798,\"span\":[0.0,300.0],\"state0\":[6.0,0.0]}"
-        },
-        {
-          "name": "kerr_retrograde_M1_a0p9_Lminus3",
-          "passed": true,
-          "status": "OrbitStatus.CAPTURE",
-          "message": "horizon crossed (r <= r_plus*(1+eps))",
-          "model": "kerr_equatorial",
-          "M": 1.0,
-          "a": 0.9,
-          "E": 0.95,
-          "L": -3.0,
-          "pr0": -0.348197741,
-          "tau0": 0.0,
-          "tauf": 300.0,
-          "dt": 0.0005,
-          "n_steps": 0,
-          "r_min": 1.4358913302439615,
-          "r_end": 1.4358913302439615,
-          "constraint_abs_max": 5.955526365397645e-06,
-          "norm_u_abs_max": 7.895105227362365e-07,
-          "norm_u_abs_max_theory": 7.895105227362365e-07,
-          "norm_u_abs_max_fd": null,
-          "events": [
-            {
-              "kind": "r_cap",
-              "tau": 7.463444849987715,
-              "tcoord": 23.30643267180363,
-              "vcoord": 7.032337982081179,
-              "r": 1.5,
-              "phi": 1.06653157115933,
-              "pr": -2.4509729421627067,
-              "i": 0
-            },
-            {
-              "kind": "horizon",
-              "tau": 7.488693927673079,
-              "tcoord": 1.2218916531882357e+297,
-              "vcoord": -1.907393948448093e+292,
-              "r": 1.4358913302439615,
-              "phi": 3.830930086439645e+296,
-              "pr": -2.632766249193246,
-              "i": 1
-            }
-          ],
-          "events_compact": "r_cap@7.46344; horizon@7.48869",
-          "tcoord_present": true,
-          "tcoord_finite_ok": true,
-          "tcoord_monotone_ok": true,
-          "dt_dtau_abs_max": null,
-          "dt_dtau_rel_max": null,
-          "time_mask_A_min": 1e-06,
-          "time_mask_n": 14978,
-          "criteria": {
-            "constraint_abs_max": 1e-05,
-            "status": "CAPTURE",
-            "min_events": 0,
-            "must_have_events": [
-              "horizon"
-            ],
-            "must_not_have_events": null,
-            "require_tcoord": false,
-            "require_vcoord": false,
-            "time_A_min": 1e-06,
-            "tcoord_monotone_tol": 0.0,
-            "dt_dtau_rel_err_max": 1e+20,
-            "dt_dtau_abs_err_max": 1e+20
-          },
-          "_sig": "{\"E\":0.95,\"L\":-3.0,\"M\":1.0,\"a\":0.9,\"capture_eps\":1e-06,\"capture_r\":1.5,\"model\":\"kerr_equatorial\",\"pr0\":-0.348197741,\"span\":[0.0,300.0],\"state0\":[6.0,0.0]}"
-        }
-      ],
-      "convergence": [],
-      "events_convergence": []
-    },
-    {
       "suite": "perihelion_precession",
       "ok": true,
       "n_cases": 2,
@@ -1820,6 +1666,162 @@
           }
         }
       ]
+    },
+    {
+      "suite": "kerr_equatorial",
+      "ok": true,
+      "ok_cases": true,
+      "ok_convergence": true,
+      "ok_events_convergence": true,
+      "n_cases": 2,
+      "results": [
+        {
+          "name": "kerr_prograde_M1_a0p9_L3",
+          "passed": true,
+          "status": "OrbitStatus.BOUND",
+          "message": "",
+          "model": "kerr_equatorial",
+          "M": 1.0,
+          "a": 0.9,
+          "E": 0.95,
+          "L": 3.0,
+          "pr0": -0.161992798,
+          "tau0": 0.0,
+          "tauf": 300.0,
+          "dt": 0.0005,
+          "n_steps": 0,
+          "r_min": 4.512647463766921,
+          "r_end": 13.734051427700217,
+          "constraint_abs_max": 6.280006896453028e-11,
+          "norm_u_abs_max": 1.0526468585680959e-10,
+          "norm_u_abs_max_theory": 1.0526468585680959e-10,
+          "norm_u_abs_max_fd": null,
+          "events": [
+            {
+              "kind": "periapse",
+              "tau": 15.03016568152616,
+              "tcoord": 22.57537009270972,
+              "vcoord": 20.20268932098243,
+              "r": 4.512647464180902,
+              "phi": 2.0459779997359244,
+              "pr": 0.0,
+              "i": 0
+            },
+            {
+              "kind": "apoapse",
+              "tau": 119.39329775694472,
+              "tcoord": 148.6898158540559,
+              "vcoord": 159.51005752810659,
+              "r": 14.564142605114403,
+              "phi": 6.638368651375747,
+              "pr": 0.0,
+              "i": 1
+            },
+            {
+              "kind": "periapse",
+              "tau": 223.75642982975882,
+              "tcoord": 274.8042616153988,
+              "vcoord": 272.4315808433262,
+              "r": 4.512647463973932,
+              "phi": 11.230759303015553,
+              "pr": 0.0,
+              "i": 2
+            }
+          ],
+          "events_compact": "periapse@15.0302; apoapse@119.393; periapse@223.756",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": null,
+          "dt_dtau_rel_max": null,
+          "time_mask_A_min": 1e-06,
+          "time_mask_n": 600001,
+          "criteria": {
+            "constraint_abs_max": 1e-06,
+            "status": "BOUND",
+            "min_events": 0,
+            "must_have_events": null,
+            "must_not_have_events": null,
+            "require_tcoord": true,
+            "require_vcoord": true,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 0.001,
+            "dt_dtau_abs_err_max": 0.1
+          },
+          "_sig": "{\"E\":0.95,\"L\":3.0,\"M\":1.0,\"a\":0.9,\"capture_eps\":1e-06,\"capture_r\":1.5,\"model\":\"kerr_equatorial\",\"pr0\":-0.161992798,\"span\":[0.0,300.0],\"state0\":[6.0,0.0]}"
+        },
+        {
+          "name": "kerr_retrograde_M1_a0p9_Lminus3",
+          "passed": true,
+          "status": "OrbitStatus.CAPTURE",
+          "message": "horizon crossed (r <= r_plus*(1+eps))",
+          "model": "kerr_equatorial",
+          "M": 1.0,
+          "a": 0.9,
+          "E": 0.95,
+          "L": -3.0,
+          "pr0": -0.348197741,
+          "tau0": 0.0,
+          "tauf": 300.0,
+          "dt": 0.0005,
+          "n_steps": 0,
+          "r_min": 1.4358913302439615,
+          "r_end": 1.4358913302439615,
+          "constraint_abs_max": 5.955526365397645e-06,
+          "norm_u_abs_max": 7.895105227362365e-07,
+          "norm_u_abs_max_theory": 7.895105227362365e-07,
+          "norm_u_abs_max_fd": null,
+          "events": [
+            {
+              "kind": "r_cap",
+              "tau": 7.463444849987715,
+              "tcoord": 23.30643267180363,
+              "vcoord": 7.032337982081179,
+              "r": 1.5,
+              "phi": 1.06653157115933,
+              "pr": -2.4509729421627067,
+              "i": 0
+            },
+            {
+              "kind": "horizon",
+              "tau": 7.488693927673079,
+              "tcoord": 1.2218916531882357e+297,
+              "vcoord": -1.907393948448093e+292,
+              "r": 1.4358913302439615,
+              "phi": 3.830930086439645e+296,
+              "pr": -2.632766249193246,
+              "i": 1
+            }
+          ],
+          "events_compact": "r_cap@7.46344; horizon@7.48869",
+          "tcoord_present": true,
+          "tcoord_finite_ok": true,
+          "tcoord_monotone_ok": true,
+          "dt_dtau_abs_max": null,
+          "dt_dtau_rel_max": null,
+          "time_mask_A_min": 1e-06,
+          "time_mask_n": 14978,
+          "criteria": {
+            "constraint_abs_max": 1e-05,
+            "status": "CAPTURE",
+            "min_events": 0,
+            "must_have_events": [
+              "horizon"
+            ],
+            "must_not_have_events": null,
+            "require_tcoord": false,
+            "require_vcoord": false,
+            "time_A_min": 1e-06,
+            "tcoord_monotone_tol": 0.0,
+            "dt_dtau_rel_err_max": 1e+20,
+            "dt_dtau_abs_err_max": 1e+20
+          },
+          "_sig": "{\"E\":0.95,\"L\":-3.0,\"M\":1.0,\"a\":0.9,\"capture_eps\":1e-06,\"capture_r\":1.5,\"model\":\"kerr_equatorial\",\"pr0\":-0.348197741,\"span\":[0.0,300.0],\"state0\":[6.0,0.0]}"
+        }
+      ],
+      "convergence": [],
+      "events_convergence": []
     }
   ]
 }

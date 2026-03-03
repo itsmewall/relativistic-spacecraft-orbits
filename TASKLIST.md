@@ -63,7 +63,7 @@
 
         A Solução: Adicionar um parâmetro record_every (ou stride) no SolverCfg. O RK4 continua rodando os cálculos finos (ex: a cada 5×10 −4τ), mas só salva o estado na struct a cada N passos (ex: a cada 100 passos). Isso salva a memória e acelera absurdamente a ponte C++ ↔ Python.
 
-    2. Dívida Técnica Brutal no validate.py (Risco de Manutenção)
+    2. Dívida Técnica Brutal no validate.py (Risco de Manutenção) 🆗
         O Problema: O seu arquivo validate.py virou um monólito gigante. A lógica que imprime a tabela e gera o JSON da suíte "schwarzschild" foi praticamente copiada e colada para a suíte "kerr_equatorial". Quando adicionarmos as suítes de propulsão, esse arquivo vai passar de 1000 linhas e ficar incontrolável.
 
         A Solução: Refatorar o validate.py. Criar uma função genérica run_and_report_suite(suite_name, cases, validator_func) que centraliza a formatação do terminal e a montagem do dicionário JSON. Isso vai enxugar o arquivo pela metade e deixá-lo pronto para aceitar N novas suítes de missões.
