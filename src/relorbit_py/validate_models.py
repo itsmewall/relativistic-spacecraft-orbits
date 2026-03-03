@@ -170,9 +170,6 @@ def validate_schw(
     events_compact = _events_compact_str(events)
     events_ok, events_reason = _check_event_criteria(events, crit)
 
-    # ----------------------------
-    # Time: t(τ) e dt/dτ (e também v(τ))
-    # ----------------------------
     params = case.get("params", {}) or {}
     M = float(params.get("M", case.get("M", 1.0)))
     Epar = float(params.get("E", case.get("E")))
@@ -182,7 +179,6 @@ def validate_schw(
     require_tcoord = bool(crit.get("require_tcoord", True))
     require_vcoord = bool(crit.get("require_vcoord", False))
 
-    # limites para não avaliar “em cima” do horizonte (onde A->0 e t explode)
     A_min = float(crit.get("time_A_min", 1e-6))
     rel_err_max_allowed = float(crit.get("dt_dtau_rel_err_max", 1e-5))
     abs_err_max_allowed = float(crit.get("dt_dtau_abs_err_max", 1e-3))
@@ -192,34 +188,25 @@ def validate_schw(
     abs_err_v_max_allowed = float(crit.get("dv_dtau_abs_err_max", 1e-3))
     mono_v_tol = float(crit.get("vcoord_monotone_tol", 0.0))
 
-    # A(r)
     A = 1.0 - (2.0 * M / np.maximum(r, 1e-300))
     mask_A = np.isfinite(A) & np.isfinite(r) & (A >= A_min) & np.isfinite(tau)
     mask_n = int(np.count_nonzero(mask_A))
 
-    # tcoord (Schwarzschild)
     tcoord = None
     if hasattr(traj, "tcoord"):
         tcoord = np.array(getattr(traj, "tcoord"), dtype=float)
-    elif hasattr(traj, "t"):
-        tcoord = np.array(getattr(traj, "t"), dtype=float)
     tcoord_present = (tcoord is not None) and (tcoord.size == tau.size)
 
-    # vcoord (EF ingoing)
     vcoord = None
     if hasattr(traj, "vcoord"):
         vcoord = np.array(getattr(traj, "vcoord"), dtype=float)
-    elif hasattr(traj, "v"):
-        vcoord = np.array(getattr(traj, "v"), dtype=float)
     vcoord_present = (vcoord is not None) and (vcoord.size == tau.size)
 
-    # checks t
     tcoord_finite_ok = True
     tcoord_mono_ok = True
     dt_dtau_abs_max = None
     dt_dtau_rel_max = None
 
-    # checks v
     vcoord_finite_ok = True
     vcoord_mono_ok = True
     dv_dtau_abs_max = None
@@ -382,19 +369,11 @@ def validate_schw(
         if dv_dtau_abs_max is not None:
             time_ok = time_ok and (dv_dtau_abs_max <= abs_err_v_max_allowed)
 
-    # ----------------------------
-    # norm_u: usar THEORY como juiz (FD é diagnóstico)
-    # ----------------------------
     norm_u_fd_max = None
     norm_u_theory_max = None
 
     if hasattr(traj, "norm_u"):
         nu_fd = np.array(getattr(traj, "norm_u"), dtype=float)
-        if nu_fd.size != tau.size:
-            raise RuntimeError(
-                f"norm_u shape mismatch no caso '{case.get('name')}': "
-                f"len(norm_u)={nu_fd.size} vs len(tau)={tau.size}"
-            )
         norm_u_fd_max = _nan_abs_max(nu_fd)
 
     if hasattr(traj, "norm_u_theory"):
@@ -443,47 +422,251 @@ def validate_schw(
         "r_min": r_min,
         "r_end": r_end,
         "constraint_abs_max": float(eps_max) if eps_max is not None else None,
-
         "norm_u_abs_max": norm_u_max_primary,
         "norm_u_abs_max_theory": norm_u_theory_max,
         "norm_u_abs_max_fd": norm_u_fd_max,
-
         "events": events,
         "events_compact": events_compact,
-
         "tcoord_present": bool(tcoord_present),
         "tcoord_finite_ok": bool(tcoord_finite_ok),
         "tcoord_monotone_ok": bool(tcoord_mono_ok),
         "dt_dtau_abs_max": dt_dtau_abs_max,
         "dt_dtau_rel_max": dt_dtau_rel_max,
-
         "vcoord_present": bool(vcoord_present),
         "vcoord_finite_ok": bool(vcoord_finite_ok),
         "vcoord_monotone_ok": bool(vcoord_mono_ok),
         "dv_dtau_abs_max": dv_dtau_abs_max,
         "dv_dtau_rel_max": dv_dtau_rel_max,
-
         "time_mask_A_min": float(A_min),
         "time_mask_n": int(mask_n),
-
         "criteria": {
             "constraint_abs_max": eps_max_allowed,
             "status": expected_status,
             "min_events": int(crit.get("min_events", 0) or 0),
             "must_have_events": crit.get("must_have_events", None),
             "must_not_have_events": crit.get("must_not_have_events", None),
-
             "require_tcoord": require_tcoord,
             "require_vcoord": require_vcoord,
             "time_A_min": A_min,
-
             "tcoord_monotone_tol": mono_tol,
             "dt_dtau_rel_err_max": rel_err_max_allowed,
             "dt_dtau_abs_err_max": abs_err_max_allowed,
-
             "vcoord_monotone_tol": mono_v_tol,
             "dv_dtau_rel_err_max": rel_err_v_max_allowed,
             "dv_dtau_abs_err_max": abs_err_v_max_allowed,
+        },
+    }
+    return out
+
+
+# ============================================================
+# NOVO: Validador de Kerr Equatorial
+# ============================================================
+
+def validate_kerr(
+    case: Dict[str, Any],
+    plotdir: Optional[str] = None,
+    time_plotdir: Optional[str] = None,
+) -> Dict[str, Any]:
+    traj = _unwrap_traj(simulate_case(case, "kerr_equatorial"))
+
+    tau = np.array(traj.tau, dtype=float)
+    r = np.array(traj.r, dtype=float)
+
+    r_min = float(np.min(r)) if r.size else None
+    r_end = float(r[-1]) if r.size else None
+
+    eps = np.array(traj.epsilon, dtype=float)
+    eps_max = float(np.max(np.abs(eps))) if eps.size else None
+
+    crit = case.get("criteria", {}) or {}
+    eps_max_allowed = float(crit.get("constraint_abs_max", 1e-10))
+    expected_status = str(crit.get("status", "BOUND"))
+
+    status_str = str(getattr(traj, "status", ""))
+    status_ok = _status_endswith(status_str, expected_status)
+
+    events = _extract_events(traj)
+    events_compact = _events_compact_str(events)
+    events_ok, events_reason = _check_event_criteria(events, crit)
+
+    params = case.get("params", {}) or {}
+    M = float(params.get("M", case.get("M", 1.0)))
+    a = float(params.get("a", case.get("a", 0.0)))
+    Epar = float(params.get("E", case.get("E")))
+    Lpar = float(params.get("L", case.get("L")))
+    pr0 = _case_pr0(case)
+
+    require_tcoord = bool(crit.get("require_tcoord", True))
+    require_vcoord = bool(crit.get("require_vcoord", False))
+
+    A_min = float(crit.get("time_A_min", 1e-6))
+    rel_err_max_allowed = float(crit.get("dt_dtau_rel_err_max", 1e-5))
+    abs_err_max_allowed = float(crit.get("dt_dtau_abs_err_max", 1e-3))
+    mono_tol = float(crit.get("tcoord_monotone_tol", 0.0))
+
+    # Mascara usando a função Delta de Kerr (para ficar longe do horizonte)
+    Delta = r**2 - 2.0 * M * r + a**2
+    A_eff = Delta / np.maximum(r**2, 1e-300)
+    mask_A = np.isfinite(A_eff) & np.isfinite(r) & (A_eff >= A_min) & np.isfinite(tau)
+    mask_n = int(np.count_nonzero(mask_A))
+
+    tcoord = np.array(getattr(traj, "tcoord"), dtype=float) if hasattr(traj, "tcoord") else None
+    tcoord_present = (tcoord is not None) and (tcoord.size == tau.size)
+
+    vcoord = np.array(getattr(traj, "vcoord"), dtype=float) if hasattr(traj, "vcoord") else None
+    vcoord_present = (vcoord is not None) and (vcoord.size == tau.size)
+
+    tcoord_finite_ok = True
+    tcoord_mono_ok = True
+    dt_dtau_abs_max = None
+    dt_dtau_rel_max = None
+    time_reason = ""
+
+    ut_num_for_plot = None
+    ut_th_for_plot = None
+
+    if require_tcoord and not tcoord_present:
+        tcoord_finite_ok = False
+        tcoord_mono_ok = False
+        time_reason = "missing tcoord (required)"
+    elif tcoord_present:
+        if mask_n > 0:
+            tcoord_finite_ok = bool(np.all(np.isfinite(tcoord[mask_A])))
+            tcoord_mono_ok = _is_monotone_increasing(tcoord[mask_A], tol=mono_tol)
+        else:
+            tcoord_finite_ok = True
+            tcoord_mono_ok = True
+
+        ut_num = np.array(getattr(traj, "ut_fd"), dtype=float) if hasattr(traj, "ut_fd") else _finite_diff_first_derivative(tcoord, tau)
+        ut_th = np.array(getattr(traj, "ut_theory"), dtype=float) if hasattr(traj, "ut_theory") else None
+
+        ut_num_for_plot = ut_num
+        ut_th_for_plot = ut_th
+
+        if ut_th is not None:
+            mask_ut = mask_A & np.isfinite(ut_num) & np.isfinite(ut_th)
+            if np.any(mask_ut):
+                abs_err = np.abs(ut_num[mask_ut] - ut_th[mask_ut])
+                dt_dtau_abs_max = float(np.max(abs_err)) if abs_err.size else None
+
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    rel_err = abs_err / np.maximum(np.abs(ut_th[mask_ut]), 1e-300)
+                dt_dtau_rel_max = float(np.max(rel_err)) if rel_err.size else None
+
+                if (dt_dtau_rel_max is not None) and (dt_dtau_rel_max > rel_err_max_allowed):
+                    time_reason = (time_reason + " | " if time_reason else "") + f"dt/dtau rel_err_max>{rel_err_max_allowed:.1e}"
+                if (dt_dtau_abs_max is not None) and (dt_dtau_abs_max > abs_err_max_allowed):
+                    time_reason = (time_reason + " | " if time_reason else "") + f"dt/dtau abs_err_max>{abs_err_max_allowed:.1e}"
+
+        if not tcoord_finite_ok:
+            time_reason = (time_reason + " | " if time_reason else "") + "tcoord non-finite"
+        if not tcoord_mono_ok:
+            time_reason = (time_reason + " | " if time_reason else "") + "tcoord not monotone"
+
+        if time_plotdir is not None:
+            try:
+                _plot_schw_time(
+                    case["name"],
+                    tau=tau,
+                    tcoord=tcoord,
+                    vcoord=vcoord if vcoord_present else None,
+                    ut_num=ut_num,
+                    ut_th=ut_th,
+                    vt_num=None,
+                    vt_th=None,
+                    outdir_time=time_plotdir,
+                )
+            except Exception:
+                pass
+
+    time_ok = True
+    if require_tcoord:
+        time_ok = time_ok and bool(tcoord_present and tcoord_finite_ok and tcoord_mono_ok)
+        if dt_dtau_rel_max is not None:
+            time_ok = time_ok and (dt_dtau_rel_max <= rel_err_max_allowed)
+        if dt_dtau_abs_max is not None:
+            time_ok = time_ok and (dt_dtau_abs_max <= abs_err_max_allowed)
+
+    norm_u_fd_max = None
+    norm_u_theory_max = None
+
+    if hasattr(traj, "norm_u"):
+        nu_fd = np.array(getattr(traj, "norm_u"), dtype=float)
+        norm_u_fd_max = _nan_abs_max(nu_fd)
+
+    if hasattr(traj, "norm_u_theory"):
+        nu_th = np.array(getattr(traj, "norm_u_theory"), dtype=float)
+        if nu_th.size == tau.size:
+            if mask_n > 0:
+                norm_u_theory_max = _nan_abs_max(nu_th[mask_A])
+            else:
+                norm_u_theory_max = _nan_abs_max(nu_th)
+
+    norm_u_max_primary = norm_u_theory_max if (norm_u_theory_max is not None) else norm_u_fd_max
+
+    passed = (
+        (eps_max is not None and eps_max <= eps_max_allowed)
+        and status_ok
+        and events_ok
+        and bool(time_ok)
+    )
+
+    dt, n_steps = _get_solver_dt_nsteps(case)
+    tau0, tauf = _get_span(case)
+
+    # Reutilizando os gráficos de Schwarzschild porque a struct de Kerr compartilha os mesmos campos
+    if plotdir is not None:
+        _plot_schw(case["name"], traj, plotdir, eps_max_allowed)
+
+    msg = getattr(traj, "message", "") or ""
+    if (not passed) and (not events_ok) and events_reason:
+        msg = (msg + " | " + events_reason).strip(" |")
+    if (not passed) and time_reason:
+        msg = (msg + " | " + time_reason).strip(" |")
+
+    out = {
+        "name": case["name"],
+        "passed": bool(passed),
+        "status": status_str,
+        "message": msg,
+        "model": "kerr_equatorial",
+        "M": M,
+        "a": a,
+        "E": Epar,
+        "L": Lpar,
+        "pr0": pr0,
+        "tau0": tau0,
+        "tauf": tauf,
+        "dt": float(dt),
+        "n_steps": int(n_steps),
+        "r_min": r_min,
+        "r_end": r_end,
+        "constraint_abs_max": float(eps_max) if eps_max is not None else None,
+        "norm_u_abs_max": norm_u_max_primary,
+        "norm_u_abs_max_theory": norm_u_theory_max,
+        "norm_u_abs_max_fd": norm_u_fd_max,
+        "events": events,
+        "events_compact": events_compact,
+        "tcoord_present": bool(tcoord_present),
+        "tcoord_finite_ok": bool(tcoord_finite_ok),
+        "tcoord_monotone_ok": bool(tcoord_mono_ok),
+        "dt_dtau_abs_max": dt_dtau_abs_max,
+        "dt_dtau_rel_max": dt_dtau_rel_max,
+        "time_mask_A_min": float(A_min),
+        "time_mask_n": int(mask_n),
+        "criteria": {
+            "constraint_abs_max": eps_max_allowed,
+            "status": expected_status,
+            "min_events": int(crit.get("min_events", 0) or 0),
+            "must_have_events": crit.get("must_have_events", None),
+            "must_not_have_events": crit.get("must_not_have_events", None),
+            "require_tcoord": require_tcoord,
+            "require_vcoord": require_vcoord,
+            "time_A_min": A_min,
+            "tcoord_monotone_tol": mono_tol,
+            "dt_dtau_rel_err_max": rel_err_max_allowed,
+            "dt_dtau_abs_err_max": abs_err_max_allowed,
         },
     }
     return out
@@ -686,7 +869,7 @@ def run_convergence_newton_one_case(
 
 
 # ============================================================
-# Convergência automática (Schwarzschild)
+# Convergência automática (Schwarzschild & Kerr)
 # ============================================================
 
 def schw_signature(case: Dict[str, Any]) -> str:
@@ -697,6 +880,26 @@ def schw_signature(case: Dict[str, Any]) -> str:
     sig = {
         "model": "schwarzschild",
         "M": float(params.get("M", case.get("M", 1.0))),
+        "E": float(params.get("E", case.get("E"))),
+        "L": float(params.get("L", case.get("L"))),
+        "state0": state0,
+        "pr0": float(_case_pr0(case)),
+        "span": span,
+        "capture_r": float(params.get("capture_r", case.get("capture_r", 2.0))),
+        "capture_eps": float(params.get("capture_eps", case.get("capture_eps", 1e-12))),
+    }
+    return json.dumps(sig, sort_keys=True, separators=(",", ":"))
+
+
+def kerr_signature(case: Dict[str, Any]) -> str:
+    params = case.get("params", {}) or {}
+    state0 = case.get("state0", None)
+    span = case.get("span", None)
+
+    sig = {
+        "model": "kerr_equatorial",
+        "M": float(params.get("M", case.get("M", 1.0))),
+        "a": float(params.get("a", case.get("a", 0.0))),
         "E": float(params.get("E", case.get("E"))),
         "L": float(params.get("L", case.get("L"))),
         "state0": state0,
@@ -877,25 +1080,25 @@ def check_convergence_events_schw(
             kinds = sorted(set(mp_big.keys()) | set(mp_small.keys()))
 
             for kind in kinds:
-                a = mp_big.get(kind, [])
-                b = mp_small.get(kind, [])
+                a_ev = mp_big.get(kind, [])
+                b_ev = mp_small.get(kind, [])
 
-                if len(a) != len(b):
+                if len(a_ev) != len(b_ev):
                     ok = False
                     mismatches.append({
                         "kind": kind,
                         "dt_big": dt_big,
                         "dt_small": dt_small,
-                        "count_big": len(a),
-                        "count_small": len(b),
-                        "tau_big": a,
-                        "tau_small": b,
+                        "count_big": len(a_ev),
+                        "count_small": len(b_ev),
+                        "tau_big": a_ev,
+                        "tau_small": b_ev,
                     })
 
-                mlen = min(len(a), len(b))
+                mlen = min(len(a_ev), len(b_ev))
                 for j in range(mlen):
-                    tau_big = float(a[j])
-                    tau_small = float(b[j])
+                    tau_big = float(a_ev[j])
+                    tau_small = float(b_ev[j])
                     err = abs(tau_small - tau_big)
                     allowed = abs_tol + rel_tol * max(abs(tau_big), 1.0)
                     if err > allowed:

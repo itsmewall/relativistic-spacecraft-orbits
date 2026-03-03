@@ -12,8 +12,10 @@ from .validate_helpers import fmt_e, fmt_f, short_msg
 from .validate_models import (
     validate_newton,
     validate_schw,
+    validate_kerr,
     run_convergence_newton_one_case,
     schw_signature,
+    kerr_signature,
     check_convergence_schw,
     check_convergence_events_schw,
 )
@@ -271,35 +273,6 @@ def main() -> None:
                             f"(abs_tol={float(v['abs_tol']):.1e}, rel_tol={float(v['rel_tol']):.2f})"
                         )
 
-        _print_header("Schwarzschild convergence: event times should change little when dt decreases")
-        if not events_conv:
-            print("No comparable groups found. Need >=2 cases with same physics and different dt.")
-        else:
-            e_rows: List[List[str]] = []
-            for g in events_conv:
-                tag = "PASS" if g["passed"] else (
-                    "SKIP" if g.get("skipped") else ("INCONCLUSIVE" if g.get("inconclusive") else "FAIL")
-                )
-                dts = ", ".join([f"{float(dt):.2e}" for dt in g["dts"]])
-                reason = str(g.get("reason", "")) if (g.get("skipped") or g.get("inconclusive")) else ""
-                e_rows.append([tag, dts, ", ".join(g["cases"]), reason])
-            _print_table(e_rows, headers=["ok", "dt (big->small)", "cases", "reason"])
-
-            for g in events_conv:
-                for mm in g.get("mismatches", []) or []:
-                    print(
-                        "mismatch: "
-                        f"{mm.get('kind','?')} count dt {float(mm.get('dt_big',0.0)):.2e}->{float(mm.get('dt_small',0.0)):.2e} "
-                        f"{mm.get('count_big','?')}->{mm.get('count_small','?')}"
-                    )
-                for v in g.get("violations", []) or []:
-                    print(
-                        f"violation: {v['kind']}[{v['occurrence']}] dt {float(v['dt_big']):.2e}->{float(v['dt_small']):.2e} "
-                        f"tau {float(v['tau_big']):.6g}->{float(v['tau_small']):.6g} "
-                        f"abs_err={float(v['abs_err']):.3e} allowed={float(v['allowed']):.3e} "
-                        f"(abs_tol={float(v['abs_tol']):.3e}, rel_tol={float(v['rel_tol']):.2f})"
-                    )
-
         report["suites"].append({
             "suite": "schwarzschild",
             "ok": bool(ok_schw_total),
@@ -310,6 +283,68 @@ def main() -> None:
             "results": schw_results,
             "convergence": conv,
             "events_convergence": events_conv,
+        })
+
+    # ----------------------------
+    # Kerr Equatorial (base suite)
+    # ----------------------------
+    if "kerr_equatorial" in suites or "kerr" in suites:
+        kerr_suite_name = "kerr_equatorial" if "kerr_equatorial" in suites else "kerr"
+        kerr_cases = suites[kerr_suite_name]["cases"]
+        kerr_results: List[Dict[str, Any]] = []
+        ok_kerr_cases = True
+
+        for c in kerr_cases:
+            rr = validate_kerr(
+                c,
+                plotdir if args.plots else None,
+                time_plotdir if args.plots else None,
+            )
+            rr["_sig"] = kerr_signature(c)
+            kerr_results.append(rr)
+            ok_kerr_cases = ok_kerr_cases and bool(rr["passed"])
+
+        # Podemos reutilizar a mesma lógica de convergência de Schwarzschild!
+        conv_k = check_convergence_schw(kerr_results, abs_tol=1e-9, rel_tol=0.25)
+        conv_ok_k = all(bool(x["passed"]) for x in conv_k) if conv_k else False
+
+        events_conv_k = check_convergence_events_schw(kerr_results, abs_tol_factor=2.0, rel_tol=0.0)
+        events_conv_ok_k = all(bool(x["passed"]) for x in events_conv_k) if events_conv_k else False
+
+        ok_kerr_total = bool(ok_kerr_cases and conv_ok_k and events_conv_ok_k)
+
+        _print_header(
+            f"Kerr Equatorial suite: ok={ok_kerr_total} "
+            f"(cases_ok={ok_kerr_cases}, conv_ok={conv_ok_k}, events_conv_ok={events_conv_ok_k}) cases={len(kerr_cases)}"
+        )
+
+        k_rows: List[List[str]] = []
+        for r in kerr_results:
+            k_rows.append([
+                "PASS" if r["passed"] else "FAIL",
+                str(r["name"]),
+                f"{float(r.get('a', 0.0)):.2f}",
+                f"{float(r['dt']):.1e}",
+                fmt_f(r.get("r_min"), width=10, prec=6),
+                fmt_e(r.get("constraint_abs_max"), width=12),
+                fmt_e(r.get("norm_u_abs_max"), width=12),
+                str(r.get("status", "")),
+                str(r.get("events_compact", "") or ""),
+                short_msg(str(r.get("message", ""))),
+            ])
+        _print_table(
+            k_rows,
+            headers=["ok", "case", "a", "dt", "r_min", "eps_max", "norm_u", "status", "events", "msg"],
+        )
+
+        report["suites"].append({
+            "suite": kerr_suite_name,
+            "ok": bool(ok_kerr_total),
+            "ok_cases": bool(ok_kerr_cases),
+            "n_cases": int(len(kerr_cases)),
+            "results": kerr_results,
+            "convergence": conv_k,
+            "events_convergence": events_conv_k,
         })
 
     # ----------------------------

@@ -116,14 +116,56 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
         pr0 = _pick_pr0(case, params)
         tau0, tauf = a0, af
 
-        # Lê do YAML (preferência: params)
         capture_r = float(params.get("capture_r", case.get("capture_r", 2.0)))
         capture_eps = float(params.get("capture_eps", case.get("capture_eps", 1e-12)))
 
-        # CHAMADA POR KEYWORD: evita erro de ordem e evita cair em defaults sem querer
-        # Retorno do engine já inclui tcoord (novo) e demais campos.
         return eng.simulate_schwarzschild_equatorial_rk4(
             M=M,
+            E=E,
+            L=L,
+            r0=r0,
+            phi0=phi0,
+            pr0=pr0,
+            tau0=tau0,
+            tauf=tauf,
+            cfg=cfg,
+            capture_r=capture_r,
+            capture_eps=capture_eps,
+        )
+
+    if model in ("kerr", "kerr_equatorial"):
+        if not hasattr(eng, "simulate_kerr_equatorial_rk4"):
+            avail = [n for n in dir(eng) if "kerr" in n.lower()]
+            raise AttributeError(
+                "Engine não expõe simulate_kerr_equatorial_rk4. "
+                f"Encontradas parecidas: {avail}"
+            )
+
+        params = case.get("params", {}) or {}
+        M = float(params.get("M", case.get("M", 1.0)))
+        a = float(params.get("a", case.get("a", 0.0)))
+        E = float(params.get("E", case.get("E")))
+        L = float(params.get("L", case.get("L")))
+
+        state0 = case.get("state0", None)
+        if not isinstance(state0, list) or len(state0) < 2:
+            raise ValueError(
+                "Para Kerr, state0 deve ser lista com pelo menos [r0, phi0]. "
+                f"Recebido: {state0}"
+            )
+
+        r0 = float(state0[0])
+        phi0 = float(state0[1])
+
+        pr0 = _pick_pr0(case, params)
+        tau0, tauf = a0, af
+
+        capture_r = float(params.get("capture_r", case.get("capture_r", 2.0)))
+        capture_eps = float(params.get("capture_eps", case.get("capture_eps", 1e-12)))
+
+        return eng.simulate_kerr_equatorial_rk4(
+            M=M,
+            a=a,
             E=E,
             L=L,
             r0=r0,

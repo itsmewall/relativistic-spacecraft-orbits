@@ -409,6 +409,7 @@ suites:
           dt_dtau_abs_err_max: 1.0e+20
           dv_dtau_rel_err_max: 1.0e+20
           dv_dtau_abs_err_max: 1.0e+20
+          isco_expected_stable: false
 
   # ============================================================
   # Suite: perihelion_precession
@@ -537,3 +538,61 @@ suites:
           dv_dtau_rel_err_max: 1.0e+20
           dv_dtau_abs_err_max: 1.0e+20
           isco_expected_stable: false
+
+# ============================================================
+  # Suite: Kerr Equatorial (Frame Dragging)
+  # Demonstra o acoplamento t-phi e a diferença prograde/retrograde
+  # ============================================================
+  kerr_equatorial:
+    cases:
+      # Órbita prógrada (L > 0) a favor do giro (a = 0.9). 
+      # Espaço-tempo "ajuda" a estabilidade.
+      - name: kerr_prograde_M1_a0p9_L3
+        model: kerr_equatorial
+        span: [0.0, 300.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          a: 0.9
+          E: 0.95
+          L: 3.0
+          capture_r: 1.5   # O horizonte externo r_+ é ~1.436M para a=0.9
+          capture_eps: 1.0e-6
+        state0: [6.0, 0.0]
+        pr0: -0.161992798  # Raiz exata da Hamiltoniana (dr/dtau < 0)
+        criteria:
+          constraint_abs_max: 1.0e-6
+          status: BOUND
+          require_tcoord: true
+          require_vcoord: true
+          dt_dtau_rel_err_max: 1.0e-3
+          dt_dtau_abs_err_max: 1.0e-1
+
+      # Mesmas condições, mas órbita retrógrada (L < 0). 
+      # Espaço-tempo "puxa" contra, tornando a órbita instável nesta 
+      # mesma distância (r=6M já é mortal para a retrógrada).
+      - name: kerr_retrograde_M1_a0p9_Lminus3
+        model: kerr_equatorial
+        span: [0.0, 300.0]
+        solver:
+          dt: 5.0e-4
+          n_steps: 0
+        params:
+          M: 1.0
+          a: 0.9
+          E: 0.95
+          L: -3.0
+          capture_r: 1.5
+          capture_eps: 1.0e-6
+        state0: [6.0, 0.0]
+        pr0: -0.348197741  # Raiz exata da Hamiltoniana (dr/dtau < 0)
+        criteria:
+          constraint_abs_max: 1.0e-5
+          status: CAPTURE
+          must_have_events: [horizon]
+          require_tcoord: false
+          require_vcoord: false
+          dt_dtau_rel_err_max: 1.0e+20
+          dt_dtau_abs_err_max: 1.0e+20
