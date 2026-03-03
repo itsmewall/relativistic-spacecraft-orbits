@@ -116,7 +116,7 @@
     * Onde: Novo integrador em C++ que aceita um parâmetro `thrust_vector` e `Isp`.
     * Critério: Demonstração de **Orbit Raising** (subida em espiral). Comparar o tempo de subida de $6M$ para $10M$ usando diferentes níveis de aceleração.
 
-    #### 6. Planejamento e Targeting (Targeting Numérico) 
+    #### 6. Planejamento e Targeting (Targeting Numérico) 🆗
 
     * Lambert Relativístico: Como não há solução fechada, implementar um **Solver de Shooting** (Bisseção ou Newton-Raphson) em Python.
     * Cenário de Missão: "Dado que estou em $r=20M$, qual $\Delta v$ devo aplicar para que meu periapse seja exatamente $3M$ (limite da ISCO de Schwarzschild)?"

@@ -47,64 +47,109 @@ def _isco_radius(params: Dict[str, Any]) -> float:
 
 
 def plot_orbit(result: MissionResult, outdir: str, m_cfg: Dict[str, Any]) -> str:
-    """Plot da órbita com segmentos coloridos e marcadores de queima."""
+    """
+    Plot da órbita com suporte a visualização de horizontes de Schwarzschild e Kerr,
+    ergosfera equatorial e marcadores de manobra.
+    """
     tau_all, r_all, phi_all, mass_all = result.get_trajectory()
-    x_all = r_all * np.cos(phi_all)
-    y_all = r_all * np.sin(phi_all)
+    
+    # Se a trajetória estiver vazia (falha imediata), não gera plot
+    if len(r_all) == 0:
+        return ""
 
     fig, ax = plt.subplots(figsize=(9, 9))
     ax.set_aspect("equal")
 
-    # Horizonte e ISCO
+    # --- Configurações Físicas ---
     params = m_cfg.get("params", {})
-    r_hor  = _horizon_radius(params)
+    M = float(params.get("M", 1.0))
     r_isco = _isco_radius(params)
 
-    ax.add_patch(mpatches.Circle((0, 0), r_hor,  color="black", alpha=0.25, label=f"Horizonte r={r_hor:.2f}M"))
-    ax.add_patch(mpatches.Circle((0, 0), r_isco, color="orange", alpha=0.12, linestyle="--",
-                                  fill=True, label=f"ISCO r={r_isco:.2f}M"))
-    ax.scatter([0], [0], color="black", s=180, zorder=5)
+    if "kerr" in result.model.lower():
+        a = float(params.get("a", 0.0))
+        # Horizonte de Eventos Externo (r+) e Interno (r-)
+        delta_disc = M**2 - a**2
+        r_plus = M + np.sqrt(max(0, delta_disc))
+        r_minus = M - np.sqrt(max(0, delta_disc))
+        # Ergosfera no equador (theta=pi/2) ocorre em r = 2M
+        r_ergo = 2.0 * M
 
-    # Segmentos com cores diferentes
+        # Desenho das superfícies de Kerr
+        ax.add_patch(mpatches.Circle((0, 0), r_ergo, color="yellow", alpha=0.1, 
+                                     label=f"Ergosfera r={r_ergo:.2f}M"))
+        ax.add_patch(mpatches.Circle((0, 0), r_plus, color="black", alpha=0.4, 
+                                     label=f"Horizonte r+={r_plus:.2f}M"))
+        if r_minus > 0.1: # Evita desenhar se for muito pequeno (a próximo de M)
+            ax.add_patch(mpatches.Circle((0, 0), r_minus, color="red", alpha=0.15, 
+                                         linestyle=":", label=f"Horiz. Interno r-={r_minus:.2f}M"))
+    else:
+        # Schwarzschild Padrão
+        r_hor = 2.0 * M
+        ax.add_patch(mpatches.Circle((0, 0), r_hor, color="black", alpha=0.3, 
+                                     label=f"Horizonte r={r_hor:.2f}M"))
+
+    # Desenho da ISCO (Inner Stable Circular Orbit)
+    ax.add_patch(mpatches.Circle((0, 0), r_isco, color="orange", alpha=0.1, linestyle="--",
+                                  fill=True, label=f"ISCO r={r_isco:.2f}M"))
+    
+    # Buraco Negro (Singularidade central simbólica)
+    ax.scatter([0], [0], color="black", s=180, zorder=10)
+
+    # --- Plotagem dos Segmentos ---
     cmap = plt.get_cmap("tab10")
     for seg_i, seg in enumerate(result.segments):
         r_s   = np.array(seg.r,   dtype=float)
         phi_s = np.array(seg.phi, dtype=float)
         xs = r_s * np.cos(phi_s)
         ys = r_s * np.sin(phi_s)
-        label = f"Segmento {seg_i+1}" if seg_i < len(result.maneuver_log) else "Segmento final"
-        ax.plot(xs, ys, color=cmap(seg_i % 10), alpha=0.8, linewidth=1.4, label=label)
+        
+        # Define label: diferencia entre segmentos de manobra e segmento final
+        if seg_i < len(result.maneuver_log):
+            label = f"Segmento {seg_i+1}"
+        else:
+            label = "Segmento final"
+            
+        ax.plot(xs, ys, color=cmap(seg_i % 10), alpha=0.8, linewidth=1.5, label=label, zorder=5)
 
-    # Marcadores de queima
+    # --- Marcadores de Manobra (Queimas) ---
     for burn in result.maneuver_log:
-        r_b   = burn.r_burn
-        phi_b = burn.phi_burn
-        xb = r_b * np.cos(phi_b)
-        yb = r_b * np.sin(phi_b)
-        ok_marker = "x" if burn.ok else "X"
-        color_b   = "red" if burn.ok else "darkred"
-        ax.scatter([xb], [yb], marker=ok_marker, color=color_b, s=160, zorder=8, linewidths=2.5)
+        xb = burn.r_burn * np.cos(burn.phi_burn)
+        yb = burn.r_burn * np.sin(burn.phi_burn)
+        
+        # Marcador visual de erro ou sucesso
+        color_b = "red" if burn.ok else "darkred"
+        marker_b = "x" if burn.ok else "X"
+        
+        ax.scatter([xb], [yb], marker=marker_b, color=color_b, s=150, zorder=15, linewidths=2.5)
+        
+        # Etiqueta de telemetria da manobra
         label_txt = (
-            f"Burn #{burn.index+1}  τ={burn.tau_scheduled:.1f}\n"
-            f"Δv={burn.dv_ms:.0f} m/s\n"
-            f"Δm={burn.fuel_consumed:.1f} kg"
+            f"Burn #{burn.index+1} τ={burn.tau_scheduled:.1f}\n"
+            f"Δv={burn.dv_ms:.1f} m/s\n"
+            f"Δm={burn.fuel_consumed:.2f} kg"
         )
         ax.annotate(label_txt, (xb, yb), textcoords="offset points",
-                    xytext=(12, 8), color=color_b, fontsize=8,
-                    bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
+                    xytext=(15, 10), color=color_b, fontsize=8, fontweight='bold',
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=color_b, alpha=0.85),
+                    zorder=20)
 
     status_str = "OK ✓" if result.ok else f"FALHA: {result.abort_reason}"
-    ax.set_title(
-        f"Perfil de Missão: {result.name}\nModelo: {result.model} | {status_str}",
-        fontsize=11,
-    )
-    ax.set_xlabel("x [M]")
-    ax.set_ylabel("y [M]")
-    ax.legend(loc="upper right", fontsize=8)
-    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.set_title(f"RelOrbit Mission Profile: {result.name}\nModelo: {result.model} | {status_str}", 
+                 fontsize=12, fontweight='bold', pad=15)
+    ax.set_xlabel("x [M]", fontsize=10)
+    ax.set_ylabel("y [M]", fontsize=10)
+    ax.grid(True, linestyle=":", alpha=0.5)
+    
+    # Ajusta limites para focar na trajetória mas manter a origem
+    max_r = max(r_all) if len(r_all) > 0 else 10.0
+    limit = max_r * 1.1
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(-limit, limit)
+    
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
     path = os.path.join(outdir, f"{result.name}_orbit.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return path
 
