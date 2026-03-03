@@ -68,7 +68,7 @@
 
         A Solução: Refatorar o validate.py. Criar uma função genérica run_and_report_suite(suite_name, cases, validator_func) que centraliza a formatação do terminal e a montagem do dicionário JSON. Isso vai enxugar o arquivo pela metade e deixá-lo pronto para aceitar N novas suítes de missões.
 
-    3. Interpolação Linear de Eventos Perto do Horizonte (Risco de Precisão)
+    3. Interpolação Linear de Eventos Perto do Horizonte (Risco de Precisão) 🆗
         O Problema: No C++, quando a sonda cruza o horizonte ou chega no periastro, você detecta a troca de sinal e usa uma função lerp (interpolação linear) para achar o ponto exato da travessia. Em órbitas Newtonianas isso é ótimo. Mas perto do horizonte de Kerr, o espaço-tempo é incrivelmente deformado e a coordenada de tempo t diverge para o infinito. Uma reta ligando o ponto anterior e o próximo gera um "borrão" na métrica exata.
 
         A Solução: Para os cálculos do TCC, a interpolação linear até serve se o dt for minúsculo, mas o ideal é implementar uma Interpolação Cúbica de Hermite. Como o RK4 já te dá a posição e a velocidade (dr/dτ) nos dois pontos, nós podemos traçar uma curva suave e fisicamente exata para cravar o evento no milissegundo correto, sem precisar diminuir o dt da simulação inteira.
