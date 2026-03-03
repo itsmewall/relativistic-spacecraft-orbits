@@ -437,6 +437,205 @@ def print_budget_tables(result: MissionResult) -> None:
 
 
 # ============================================================
+# Plot de Invariante Físico (verificação de erro numérico)
+# ============================================================
+
+# Bandas de qualidade: (limite_superior_relativo, cor, rótulo)
+_QUALITY_BANDS = [
+    (1e-10, "#2ecc71", "Machine ε"),   # verde escuro
+    (1e-7,  "#a8e6a3", "Excellent"),    # verde claro
+    (1e-4,  "#fff3a3", "Good"),         # amarelo
+    (1e-1,  "#ffc880", "Warning"),      # laranja
+    (1e9,   "#ff9999", "Poor"),         # vermelho
+]
+
+_QUALITY_COLOR = {
+    "excellent": "#2ecc71",
+    "good":      "#f39c12",
+    "warning":   "#e67e22",
+    "poor":      "#e74c3c",
+    "no_data":   "#95a5a6",
+}
+
+
+def plot_invariant(result: MissionResult, outdir: str, m_cfg: Dict[str, Any]) -> str:
+    """
+    Gera o gráfico de conservação do invariante ε = pr² + V_eff − E².
+
+    Layout — 3 painéis empilhados:
+
+    ┌─────────────────────────────────────────────┐
+    │ Painel 1: ε(τ) — valor absoluto             │
+    │   • Geodésica: ideal = 0; desvio = erro RK4 │
+    │   • Low-Thrust: ε ≠ 0 durante empuxo        │
+    │   • Linhas verticais: τ das manobras         │
+    │   • Anotações: salto Δε em cada manobra      │
+    ├─────────────────────────────────────────────┤
+    │ Painel 2: |Δε_intra(τ)| — escala log        │
+    │   Deriva DENTRO de cada segmento:            │
+    │     Δε_intra = |ε(τ) − ε(τ_seg_início)|     │
+    │   Isso é erro numérico puro do RK4,          │
+    │   independente do modelo (geo ou LT).        │
+    │   Bandas coloridas de qualidade.             │
+    ├─────────────────────────────────────────────┤
+    │ Painel 3: |Δε_intra| / E²  (erro relativo)  │
+    │   Mesmas bandas. Badge de qualidade.         │
+    └─────────────────────────────────────────────┘
+    """
+    tau_eps, eps_all, boundaries = result.get_epsilon()
+    stats = result.epsilon_stats()
+
+    if len(eps_all) == 0 or stats.get("n_segments", 0) == 0:
+        print(f"   [invariante] Sem dados de epsilon para {result.name}.")
+        return ""
+
+    is_lt = "lowthrust" in result.model.lower() or "_lt" in result.model.lower()
+    E2    = stats["eps_E2_scale"]
+
+    # ── Calcular Δε intrassegmento ──────────────────────────────
+    seg_starts = list(boundaries) + [len(eps_all)]
+    drift_abs  = np.full(len(eps_all), np.nan)  # |ε(τ) − ε_seg0|
+    drift_rel  = np.full(len(eps_all), np.nan)  # /E²
+
+    for k in range(len(boundaries)):
+        i0 = seg_starts[k]
+        i1 = seg_starts[k + 1]
+        seg = eps_all[i0:i1]
+        if len(seg) == 0:
+            continue
+        seg0 = seg[0]  # valor inicial do segmento (referência)
+        d = np.abs(seg - seg0)
+        drift_abs[i0:i1] = d
+        drift_rel[i0:i1] = d / max(abs(E2), 1e-14)
+
+    # ── Figura 3 painéis ────────────────────────────────────────
+    fig, axes = plt.subplots(3, 1, figsize=(12, 10),
+                             gridspec_kw={"height_ratios": [2, 1.8, 1.8]})
+    fig.subplots_adjust(hspace=0.42)
+
+    ax_eps, ax_drift, ax_rel = axes
+
+    # ── Cores de segmento para fundo ────────────────────────────
+    seg_bg_colors = ["#f0f4ff", "#fff8f0"]
+    for k in range(len(boundaries)):
+        i0 = seg_starts[k]
+        i1 = seg_starts[k + 1]
+        if i1 <= i0:
+            continue
+        t0 = tau_eps[i0]
+        t1 = tau_eps[i1 - 1]
+        for ax in axes:
+            ax.axvspan(t0, t1, color=seg_bg_colors[k % 2], alpha=0.45, zorder=0)
+
+    # ── Manobra: linhas verticais e anotações de salto ──────────
+    for burn in result.maneuver_log:
+        tau_b = burn.tau_actual
+        # Salto em ε nesta manobra
+        jump_idx = burn.index
+        jump_val = (stats["jump_at_maneuver"][jump_idx]
+                    if jump_idx < len(stats["jump_at_maneuver"]) else None)
+        for ax in axes:
+            ax.axvline(tau_b, color="#c0392b", linestyle="--", linewidth=1.1,
+                       alpha=0.7, zorder=3)
+        if jump_val is not None:
+            ax_eps.annotate(
+                f"Burn #{burn.index+1}\nΔε={jump_val:.1e}",
+                xy=(tau_b, 0), xycoords=("data", "axes fraction"),
+                xytext=(6, 0.62), textcoords=("offset points", "axes fraction"),
+                fontsize=7, color="#c0392b",
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#c0392b", alpha=0.85),
+                zorder=5,
+            )
+
+    # ── Painel 1: ε(τ) ──────────────────────────────────────────
+    finite_m = np.isfinite(eps_all)
+    ax_eps.plot(tau_eps[finite_m], eps_all[finite_m],
+                color="#2c3e50", linewidth=1.3, zorder=4, label="ε(τ)")
+    ax_eps.axhline(0.0, color="gray", linewidth=0.9, linestyle=":", zorder=2)
+
+    if is_lt:
+        subtitle = "ε ≠ 0 durante empuxo (física LT)"
+    else:
+        subtitle = "ε → 0 ideal (geodésica); desvio = erro RK4"
+
+    ax_eps.set_ylabel("ε = pr² + V_eff − E²", fontsize=9)
+    ax_eps.set_title(
+        f"Conservação do Invariante de Massa — {result.name}\n"
+        f"Modelo: {result.model}  |  {subtitle}",
+        fontsize=10, fontweight="bold",
+    )
+    ax_eps.legend(fontsize=8, loc="upper left")
+    ax_eps.grid(True, linestyle=":", alpha=0.4, zorder=1)
+    ax_eps.tick_params(labelbottom=False)
+
+    # ── Painel 2: |Δε_intra| log ─────────────────────────────────
+    valid = np.isfinite(drift_abs) & (drift_abs > 0)
+    if valid.any():
+        ax_drift.semilogy(tau_eps[valid], drift_abs[valid],
+                          color="#8e44ad", linewidth=1.2, zorder=4,
+                          label="|Δε_intra(τ)|")
+    # Bandas de qualidade (valores absolutos escalados por E²)
+    y_lo, y_hi = 1e-15, max(float(np.nanmax(drift_abs[valid])) * 5 if valid.any() else 1e-3, 1e-3)
+    for (lim, color, name) in _QUALITY_BANDS:
+        band_abs = lim * E2
+        if band_abs > y_lo:
+            ax_drift.axhline(band_abs, color=color, linestyle="--",
+                             linewidth=0.9, alpha=0.8, zorder=2)
+            ax_drift.text(tau_eps[-1], band_abs, f" {name}",
+                          va="bottom", fontsize=7, color="gray", zorder=3)
+
+    ax_drift.set_ylim(y_lo, y_hi * 2)
+    ax_drift.set_ylabel("|Δε_intra| [abs]", fontsize=9)
+    ax_drift.set_title("Deriva intrassegmento — erro numérico puro do RK4", fontsize=9)
+    ax_drift.legend(fontsize=8, loc="upper left")
+    ax_drift.grid(True, which="both", linestyle=":", alpha=0.3, zorder=1)
+    ax_drift.tick_params(labelbottom=False)
+
+    # ── Painel 3: |Δε_intra| / E² ────────────────────────────────
+    valid_r = np.isfinite(drift_rel) & (drift_rel > 0)
+    if valid_r.any():
+        ax_rel.semilogy(tau_eps[valid_r], drift_rel[valid_r],
+                        color="#2980b9", linewidth=1.2, zorder=4,
+                        label="|Δε_intra| / E²")
+    y_lo_r = 1e-16
+    y_hi_r = max(float(np.nanmax(drift_rel[valid_r])) * 5 if valid_r.any() else 1e-3, 1e-3)
+    for (lim, color, name) in _QUALITY_BANDS:
+        if lim > y_lo_r:
+            ax_rel.axhline(lim, color=color, linestyle="--",
+                           linewidth=0.9, alpha=0.8, zorder=2)
+            ax_rel.text(tau_eps[-1], lim, f" {name}",
+                        va="bottom", fontsize=7, color="gray", zorder=3)
+    ax_rel.set_ylim(y_lo_r, y_hi_r * 2)
+    ax_rel.set_xlabel("Tempo próprio τ [M]", fontsize=9)
+    ax_rel.set_ylabel("|Δε_intra| / E²", fontsize=9)
+    ax_rel.set_title("Erro relativo (adimensional)", fontsize=9)
+    ax_rel.legend(fontsize=8, loc="upper left")
+    ax_rel.grid(True, which="both", linestyle=":", alpha=0.3, zorder=1)
+
+    # ── Badge de qualidade ────────────────────────────────────────
+    qlabel = stats.get("quality_label", "no_data").upper()
+    qcolor = _QUALITY_COLOR.get(stats.get("quality_label", "no_data"), "gray")
+    dr_max = stats.get("drift_rel_max", float("nan"))
+    badge_txt = (
+        f"Qualidade: {qlabel}\n"
+        f"max|Δε|/E² = {dr_max:.2e}\n"
+        f"RMS ε = {stats.get('eps_rms', float('nan')):.2e}"
+    )
+    ax_rel.text(
+        0.98, 0.97, badge_txt,
+        transform=ax_rel.transAxes,
+        ha="right", va="top", fontsize=8,
+        bbox=dict(boxstyle="round,pad=0.4", fc=qcolor, alpha=0.25, ec=qcolor),
+        zorder=6,
+    )
+
+    path = os.path.join(outdir, f"{result.name}_invariant.png")
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+# ============================================================
 # Runner principal
 # ============================================================
 
@@ -460,7 +659,11 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
             if result.segments:
                 orbit_path = plot_orbit(result, outdir, m_cfg)
                 mass_path = plot_mass(result, outdir)
-                print(f"\n   Plots: {orbit_path}, {mass_path}")
+                inv_path  = plot_invariant(result, outdir, m_cfg)
+                plots_msg = f"\n   Plots: {orbit_path}, {mass_path}"
+                if inv_path:
+                    plots_msg += f"\n   Invariante: {inv_path}"
+                print(plots_msg)
             else:
                 print(f"\n   [AVISO] Gráficos ignorados: sem segmentos gerados.")
 
@@ -513,4 +716,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()  
+    main()

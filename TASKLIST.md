@@ -73,6 +73,25 @@
 
         A Solução: Para os cálculos do TCC, a interpolação linear até serve se o dt for minúsculo, mas o ideal é implementar uma Interpolação Cúbica de Hermite. Como o RK4 já te dá a posição e a velocidade (dr/dτ) nos dois pontos, nós podemos traçar uma curva suave e fisicamente exata para cravar o evento no milissegundo correto, sem precisar diminuir o dt da simulação inteira.
 
+
+#### v3
+
+    1. Extração de Invariantes Físicos (Verificação de Erro)
+
+        * O problema: Integradores numéricos acumulam erros de truncamento que podem criar trajetórias fisicamente impossíveis. Sem um gráfico de erro de conservação, não há prova de que a sonda não está ganhando ou perdendo energia artificialmente devido às limitações do algoritmo RK4.
+        * A solução: Implementar o monitoramento do invariante $\epsilon = p_\mu p^\mu$, gerando um gráfico de $\Delta \epsilon$ vs Tempo para provar a estabilidade numérica e o rigor científico da simulação.
+
+    2. Análise de Redshift Assintótico
+
+        * O problema: Gráficos de redshift em escala linear escondem o comportamento matemático real perto do horizonte de eventos, dificultando a validação da métrica. Sem uma análise de lei de potência, o trabalho não confirma se a latência diverge conforme previsto pela Relatividade Geral.
+        * A solução: Realizar a análise em escala log-log do Redshift em função da distância ao horizonte $(r - r_s)$, demonstrando visualmente que o atraso de sinal segue a divergência teórica exata.
+
+    3. Mapa de Visibilidade Relativística (Light Bending)
+
+        * O problema: A visibilidade baseada em oclusão geométrica (linha reta) é fisicamente incorreta em campos fortes, pois ignora que a gravidade curva a luz. Isso invalida qualquer análise de link de comunicação real entre a sonda e a Terra.
+        * A solução: Implementar o cálculo do Cone de Escape de Fótons, definindo a visibilidade com base no ângulo crítico de emissão para determinar se o sinal de rádio consegue vencer a curvatura do espaço-tempo e atingir o infinito.
+
+
 ## FEATURES
 
 ### A - Física GR de alto nível (P1) 🆗

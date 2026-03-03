@@ -123,6 +123,139 @@ class MissionResult:
         self._mass = np.concatenate(masses)
         return self._tau, self._r, self._phi, self._mass
 
+    def get_epsilon(self):
+        """
+        Retorna (tau_all, eps_all, seg_boundaries) concatenados de todos os segmentos.
+
+        seg_boundaries : lista de int com o índice (no array concatenado) onde
+                         cada segmento começa — útil para detectar saltos de manobra.
+
+        INTERPRETAÇÃO FÍSICA:
+          ε = pr² + V_eff(r, L) − E²
+
+          • Geodésica: ε ≡ 0 por construção (condição inicial satisfaz a constraint
+            de massa).  Qualquer desvio ε(τ) ≠ 0 é *erro numérico puro* do RK4.
+
+          • Low-Thrust: ε ≠ 0 enquanto o motor está ligado — o empuxo força o
+            objeto para fora da hipersuperfície geodésica.  ε(τ) mede a distância
+            ao shell de massa em cada instante.
+
+          • Após manobra impulsiva: ε salta porque pr e L mudam mas E não (nossa
+            aproximação). O salto Δε_manobra é esperado e deve ser anotado no gráfico.
+        """
+        if not self.segments:
+            return np.array([]), np.array([]), []
+
+        taus, epsilons, boundaries = [], [], []
+        cumulative = 0
+        for seg in self.segments:
+            if not hasattr(seg, "epsilon"):
+                continue
+            eps = np.array(seg.epsilon, dtype=float)
+            tau = np.array(seg.tau,     dtype=float)
+            if len(eps) == 0:
+                continue
+            boundaries.append(cumulative)
+            taus.append(tau)
+            epsilons.append(eps)
+            cumulative += len(tau)
+
+        if not taus:
+            return np.array([]), np.array([]), []
+        return np.concatenate(taus), np.concatenate(epsilons), boundaries
+
+    def epsilon_stats(self) -> Dict[str, Any]:
+        """
+        Retorna um dicionário com métricas de qualidade numérica.
+
+        Chaves:
+          n_segments          — número de segmentos com epsilon
+          eps_max_abs         — max |ε| em toda a missão
+          eps_rms             — RMS de ε
+          eps_E2_scale        — E² inicial (escala de referência)
+          eps_rel_max         — max |ε| / E²  (erro relativo)
+          per_seg_drift       — lista de max |Δε| por segmento (deriva intrassegmento)
+          jump_at_maneuver    — lista de |ε_after − ε_before| em cada manobra
+          quality_label       — "excellent" | "good" | "warning" | "poor"
+          quality_threshold   — valor de eps_rel_max usado para classificar
+        """
+        tau_all, eps_all, boundaries = self.get_epsilon()
+        if len(eps_all) == 0:
+            return {"n_segments": 0, "quality_label": "no_data"}
+
+        E2 = self.E_initial ** 2 if abs(self.E_initial) > 1e-14 else 1.0
+
+        # Deriva dentro de cada segmento: Δε = ε(τ) − ε(τ_seg_start)
+        per_seg_drift = []
+        seg_starts = list(boundaries) + [len(eps_all)]
+        for k in range(len(boundaries)):
+            i0 = seg_starts[k]
+            i1 = seg_starts[k + 1]
+            seg_eps = eps_all[i0:i1]
+            finite   = seg_eps[np.isfinite(seg_eps)]
+            if len(finite) == 0:
+                per_seg_drift.append(float("nan"))
+                continue
+            drift = np.max(np.abs(finite - finite[0]))
+            per_seg_drift.append(float(drift))
+
+        # Salto nas manobras: diferença entre último ε do segmento k e primeiro do k+1
+        jump_at_maneuver = []
+        for k in range(len(boundaries) - 1):
+            last_of_prev  = eps_all[seg_starts[k + 1] - 1]
+            first_of_next = eps_all[seg_starts[k + 1]]
+            jump_at_maneuver.append(float(abs(first_of_next - last_of_prev)))
+
+        finite_eps = eps_all[np.isfinite(eps_all)]
+        eps_max_abs  = float(np.max(np.abs(finite_eps)))   if len(finite_eps) else float("nan")
+        eps_rms      = float(np.sqrt(np.mean(finite_eps**2))) if len(finite_eps) else float("nan")
+        eps_rel_max  = eps_max_abs / E2
+
+        # Classificação de qualidade (baseada em erro relativo intrassegmento)
+        drift_rel = max((d / E2 for d in per_seg_drift if np.isfinite(d)), default=float("nan"))
+        if   drift_rel < 1e-9:  label = "excellent"
+        elif drift_rel < 1e-6:  label = "good"
+        elif drift_rel < 1e-3:  label = "warning"
+        else:                   label = "poor"
+
+        return {
+            "n_segments":       len(boundaries),
+            "eps_max_abs":      eps_max_abs,
+            "eps_rms":          eps_rms,
+            "eps_E2_scale":     E2,
+            "eps_rel_max":      eps_rel_max,
+            "per_seg_drift":    per_seg_drift,
+            "drift_rel_max":    drift_rel,
+            "jump_at_maneuver": jump_at_maneuver,
+            "quality_label":    label,
+            "quality_threshold": drift_rel,
+        }
+
+    def print_invariant_summary(self) -> None:
+        """Imprime tabela de qualidade numérica do invariante ε no terminal."""
+        stats = self.epsilon_stats()
+        if stats.get("n_segments", 0) == 0:
+            print("  [invariante] Sem dados de epsilon nos segmentos.")
+            return
+
+        label  = stats["quality_label"].upper()
+        badges = {"EXCELLENT": "✓✓", "GOOD": "✓", "WARNING": "⚠", "POOR": "✗✗", "NO_DATA": "?"}
+        badge  = badges.get(label, "?")
+
+        print(f"\n  Invariante ε = pr² + V_eff − E²  [{badge} {label}]")
+        print(f"  {'─'*50}")
+        print(f"  max |ε|      = {stats['eps_max_abs']:.4e}   (escala E²={stats['eps_E2_scale']:.4f})")
+        print(f"  max |ε|/E²   = {stats['eps_rel_max']:.4e}   (erro relativo)")
+        print(f"  RMS ε        = {stats['eps_rms']:.4e}")
+        print(f"  Deriva/segmento (intrassegmento):")
+        for k, d in enumerate(stats["per_seg_drift"]):
+            dr = d / stats["eps_E2_scale"] if stats["eps_E2_scale"] > 0 else float("nan")
+            print(f"    Seg {k+1}: max|Δε| = {d:.3e}  ({dr:.3e} relativo)")
+        if stats["jump_at_maneuver"]:
+            print(f"  Salto em manobras (ε_antes→depois):")
+            for k, j in enumerate(stats["jump_at_maneuver"]):
+                print(f"    Burn {k+1}→{k+2}: |Δε| = {j:.3e}")
+
     def _attach_mass(traj: Any, current_mass: float, n: int) -> None:
         """
         Não tentamos mais modificar o objeto C++.
@@ -200,6 +333,9 @@ class MissionResult:
 
         print(f"\n  Mass Budget:")
         _print_table(self.mass_budget())
+
+        # Invariante físico (verificação de erro numérico)
+        self.print_invariant_summary()
 
 
 # ============================================================
