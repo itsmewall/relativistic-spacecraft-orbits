@@ -122,7 +122,7 @@
     * Cenário de Missão: "Dado que estou em $r=20M$, qual $\Delta v$ devo aplicar para que meu periapse seja exatamente $3M$ (limite da ISCO de Schwarzschild)?"
     * Critério: O planejador deve sugerir a manobra e a simulação deve confirmar a chegada no alvo com erro inferior a 0.1%.
 
-    #### 7. Telemetria e Observáveis (O toque final de Realismo)
+    #### 7. Telemetria e Observáveis 🆗
 
     * Redshift e Doppler: Calcular a razão $dt/d\tau$ para cada ponto da trajetória. Isso simula o atraso de comunicação e a mudança de frequência dos sinais enviados pela sonda para a base na Terra.
     * Visibilidade: Implementar o ângulo de visibilidade (horizonte local) para saber se a sonda está "escondida" atrás do buraco negro em relação a um observador distante.
