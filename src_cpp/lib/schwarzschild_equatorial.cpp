@@ -167,16 +167,22 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         if (n_steps < 1) n_steps = 1;
     }
 
-    // reserva
-    traj.tau.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.r.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.phi.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.tcoord.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.vcoord.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.pr.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.epsilon.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.E_series.reserve(static_cast<size_t>(n_steps) + 1);
-    traj.L_series.reserve(static_cast<size_t>(n_steps) + 1);
+    // ============================================================
+    // NOVO: Lógica de stride para mitigar Out of Memory
+    // ============================================================
+    int record_every = cfg.record_every > 0 ? cfg.record_every : 1;
+    size_t res_size = static_cast<size_t>(n_steps / record_every) + 2;
+
+    // reserva com tamanho reduzido
+    traj.tau.reserve(res_size);
+    traj.r.reserve(res_size);
+    traj.phi.reserve(res_size);
+    traj.tcoord.reserve(res_size);
+    traj.vcoord.reserve(res_size);
+    traj.pr.reserve(res_size);
+    traj.epsilon.reserve(res_size);
+    traj.E_series.reserve(res_size);
+    traj.L_series.reserve(res_size);
 
     // estado inicial
     double tau = tau0;
@@ -344,9 +350,16 @@ TrajectorySchwarzschildEq simulate_schwarzschild_equatorial_rk4(
         vcoord = v_next;
         pr = pr_next;
 
-        append_sample(tau, r, phi, tcoord, vcoord, pr);
+        // ============================================================
+        // NOVO: Verifica se é momento de salvar o estado na memória
+        // ============================================================
+        bool is_last = (step == n_steps - 1) || (tau >= tauf);
+        
+        if ((step + 1) % record_every == 0 || is_last) {
+            append_sample(tau, r, phi, tcoord, vcoord, pr);
+        }
 
-        if (tau >= tauf) break;
+        if (is_last) break;
     }
 
     // =========================================

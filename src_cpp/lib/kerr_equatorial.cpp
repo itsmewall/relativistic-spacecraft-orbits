@@ -40,12 +40,10 @@ static inline bool crossing_r(
     return true;
 }
 
-// Raiz externa do horizonte de Kerr
 static inline double r_plus_kerr(double M, double a) {
     return M + std::sqrt(std::max(0.0, M * M - a * a));
 }
 
-// ODE RHS para Kerr Equatorial em tempo próprio tau
 static inline void rhs_kerr_eq(
     double M, double a, double E, double L,
     double r, double /*phi*/, double /*tcoord*/, double /*vcoord*/, double pr,
@@ -63,15 +61,11 @@ static inline void rhs_kerr_eq(
     constexpr double Delta_floor = 1e-300;
     const double D_safe = (Delta >= Delta_floor) ? Delta : Delta_floor;
 
-    // Equações de movimento acopladas (Frame Dragging)
     dphi = (2.0 * M * a * E / r + (1.0 - 2.0 * M / r) * L) / D_safe;
     dt   = ((r2 + a2 + 2.0 * M * a2 / r) * E - 2.0 * M * a * L / r) / D_safe;
-    
-    // Tempo regular (análogo a ingoing EF)
     dv   = dt + ((r2 + a2) / D_safe) * pr;
 
     const double K = L - a * E;
-    // Aceleração radial
     dpr = -M / r2 + (L * L + a2 * (1.0 - E2)) / r3 - 3.0 * M * K * K / r4;
 }
 
@@ -84,9 +78,7 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
 ) {
     TrajectoryKerrEq traj;
     traj.M = M; traj.a = a; traj.E = E; traj.L = L; traj.r0 = r0; traj.phi0 = phi0;
-
     traj.status = OrbitStatus::BOUND;
-    traj.message.clear();
 
     const double dt0 = cfg.dt;
     if (!(dt0 > 0.0) || !is_finite(dt0) || !(tauf >= tau0)) {
@@ -104,8 +96,9 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
         n_steps = std::max(1, static_cast<int>(std::ceil((tauf - tau0) / dt0)));
     }
 
-    // Reservas de memória
-    size_t res_size = static_cast<size_t>(n_steps) + 1;
+    int record_every = cfg.record_every > 0 ? cfg.record_every : 1;
+    size_t res_size = static_cast<size_t>(n_steps / record_every) + 2;
+
     traj.tau.reserve(res_size); traj.r.reserve(res_size); traj.phi.reserve(res_size);
     traj.tcoord.reserve(res_size); traj.vcoord.reserve(res_size); traj.pr.reserve(res_size);
     traj.epsilon.reserve(res_size); traj.E_series.reserve(res_size); traj.L_series.reserve(res_size);
@@ -116,7 +109,6 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
         traj.tau.push_back(tau_s); traj.r.push_back(r_s); traj.phi.push_back(phi_s);
         traj.tcoord.push_back(t_s); traj.vcoord.push_back(v_s); traj.pr.push_back(pr_s);
         
-        // Conservação de energia pseudo-hamiltoniana
         const double K = L - a * E;
         const double theory_pr2 = (E*E - 1.0) + 2.0*M/r_s - (L*L + a*a*(1.0 - E*E))/(r_s*r_s) + 2.0*M*K*K/(r_s*r_s*r_s);
         traj.epsilon.push_back(pr_s * pr_s - theory_pr2);
@@ -133,7 +125,6 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
     append_sample(tau, r, phi, tcoord, vcoord, pr);
     bool rcap_logged = false;
 
-    // Loop Principal RK4
     for (int step = 0; step < n_steps; ++step) {
         double h = dt0;
         if (tau + h > tauf) h = (tauf - tau);
@@ -166,7 +157,6 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
             break;
         }
 
-        // Turning events (periapse/apoapse)
         if (pr_prev != 0.0) {
             if ((pr_prev < 0.0 && pr_next >= 0.0) || (pr_prev > 0.0 && pr_next <= 0.0)) {
                 const double denom = (pr_prev - pr_next);
@@ -179,7 +169,6 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
             }
         }
 
-        // r_cap marker
         if (!rcap_logged) {
             double alpha = 0.0;
             if (crossing_r(r_prev, r_next, r_cap, alpha)) {
@@ -189,7 +178,6 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
             }
         }
 
-        // Horizon crossing
         {
             double alpha = 0.0;
             if (crossing_r(r_prev, r_next, r_hor, alpha)) {
@@ -204,10 +192,15 @@ TrajectoryKerrEq simulate_kerr_equatorial_rk4(
         }
 
         tau = tau_next; r = r_next; phi = phi_next; tcoord = t_next; vcoord = v_next; pr = pr_next;
-        append_sample(tau, r, phi, tcoord, vcoord, pr);
+        
+        bool is_last = (step == n_steps - 1) || (tau >= tauf);
+        if ((step + 1) % record_every == 0 || is_last) {
+            append_sample(tau, r, phi, tcoord, vcoord, pr);
+        }
+
+        if (is_last) break;
     }
 
-    // Pós-processamento Teórico / FD para métrica
     const size_t N = traj.tau.size();
     traj.ut_fd.assign(N, std::numeric_limits<double>::quiet_NaN());
     traj.vt_fd.assign(N, std::numeric_limits<double>::quiet_NaN());

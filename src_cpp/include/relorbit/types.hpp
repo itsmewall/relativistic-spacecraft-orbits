@@ -1,3 +1,4 @@
+// src_cpp/include/relorbit/types.hpp
 #pragma once
 #include <array>
 #include <cstdint>
@@ -16,6 +17,7 @@ enum class OrbitStatus : std::uint8_t {
 struct SolverCfg {
     double dt = 1.0e-3;   // passo fixo
     int n_steps = 0;      // se 0, calculamos via (tf-t0)/dt
+    int record_every = 1; // salva o estado a cada N passos (1 = todos)
 };
 
 struct TrajectoryNewton {

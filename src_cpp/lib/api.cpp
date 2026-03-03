@@ -1,3 +1,4 @@
+// src_cpp/lib/api.cpp
 #include "relorbit/api.hpp"
 #include <cmath>
 #include <stdexcept>
@@ -26,11 +27,8 @@ static inline double h_newton(const std::array<double,4>& s) {
     return x*vy - y*vx;
 }
 
-static inline OrbitStatus status_from_energy(double E0, double tol = 0.0) {
-    // Regra física: E<0 bound; E>=0 unbound (parabólica entra como unbound por definição)
-    // tol pode ser usado se você quiser tratar ruído numérico perto de 0.
-    if (E0 < -tol) return OrbitStatus::BOUND;
-    return OrbitStatus::UNBOUND;
+static inline OrbitStatus status_from_energy(double E) {
+    return (E < 0.0) ? OrbitStatus::BOUND : OrbitStatus::UNBOUND;
 }
 
 TrajectoryNewton simulate_newton_rk4(
@@ -40,29 +38,42 @@ TrajectoryNewton simulate_newton_rk4(
     double tf,
     const SolverCfg& cfg
 ) {
-    if (tf <= t0) throw std::runtime_error("tf must be > t0");
-    if (!(cfg.dt > 0.0) && cfg.n_steps <= 0) throw std::runtime_error("cfg.dt must be > 0 if n_steps==0");
-
-    int n = cfg.n_steps;
-    if (n <= 0) {
-        n = static_cast<int>(std::ceil((tf - t0) / cfg.dt));
-        if (n < 1) n = 1;
-    }
-    const double dt = (tf - t0) / static_cast<double>(n);
-
     TrajectoryNewton out;
-    out.t.reserve(static_cast<size_t>(n)+1);
-    out.y.reserve(static_cast<size_t>(n)+1);
-    out.energy.reserve(static_cast<size_t>(n)+1);
-    out.h.reserve(static_cast<size_t>(n)+1);
+    out.status = OrbitStatus::BOUND;
 
-    std::array<double,4> s = state0;
+    const double dt = cfg.dt;
+    if (!(dt > 0.0) || !std::isfinite(dt)) {
+        out.status = OrbitStatus::ERROR;
+        out.message = "invalid dt";
+        return out;
+    }
+    if (!(tf >= t0) || !std::isfinite(t0) || !std::isfinite(tf)) {
+        out.status = OrbitStatus::ERROR;
+        out.message = "invalid span";
+        return out;
+    }
+    if (!(mu > 0.0) || !std::isfinite(mu)) {
+        out.status = OrbitStatus::ERROR;
+        out.message = "invalid mu";
+        return out;
+    }
+
+    int n_steps = cfg.n_steps;
+    if (n_steps <= 0) {
+        n_steps = static_cast<int>(std::ceil((tf - t0) / dt));
+        if (n_steps < 1) n_steps = 1;
+    }
+
+    int record_every = cfg.record_every > 0 ? cfg.record_every : 1;
+    size_t res_size = static_cast<size_t>(n_steps / record_every) + 2;
+
+    out.t.reserve(res_size);
+    out.y.reserve(res_size);
+    out.energy.reserve(res_size);
+    out.h.reserve(res_size);
+
     double t = t0;
-
-    // Define status já no estado inicial (teoria)
-    const double E0 = energy_newton(mu, s);
-    out.status = status_from_energy(E0, /*tol=*/0.0);
-    out.message.clear();
+    std::array<double,4> s = state0;
 
     auto push = [&]() {
         out.t.push_back(t);
@@ -71,11 +82,17 @@ TrajectoryNewton simulate_newton_rk4(
         out.h.push_back(h_newton(s));
     };
 
+    if (!std::isfinite(s[0]) || !std::isfinite(s[1]) || !std::isfinite(s[2]) || !std::isfinite(s[3])) {
+        out.status = OrbitStatus::ERROR;
+        out.message = "invalid initial state (non-finite)";
+        return out;
+    }
+
     push();
 
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n_steps; ++i) {
         const auto k1 = f_newton(mu, s);
-
+        
         std::array<double,4> s2 {
             s[0] + 0.5*dt*k1[0],
             s[1] + 0.5*dt*k1[1],
@@ -105,26 +122,31 @@ TrajectoryNewton simulate_newton_rk4(
         }
 
         t += dt;
-        push();
 
-        if (!std::isfinite(s[0]) || !std::isfinite(s[1]) || !std::isfinite(s[2]) || !std::isfinite(s[3])) {
+        bool is_last = (i == n_steps - 1) || (t >= tf);
+        bool broken = !std::isfinite(s[0]) || !std::isfinite(s[1]) || !std::isfinite(s[2]) || !std::isfinite(s[3]);
+
+        if ((i + 1) % record_every == 0 || is_last || broken) {
+            push();
+        }
+
+        if (broken) {
             out.status = OrbitStatus::ERROR;
             out.message = "non-finite state encountered";
             break;
         }
+
+        if (is_last) break;
     }
 
-    // Se quiser “reafirmar” o status ao fim, pode (não muda a teoria em 2-body ideal):
-    // Só não sobrescreve ERROR.
     if (out.status != OrbitStatus::ERROR && !out.energy.empty()) {
         const double E_init = out.energy.front();
-        out.status = status_from_energy(E_init, /*tol=*/0.0);
+        out.status = status_from_energy(E_init);
     }
 
     return out;
 }
 
-// Wrapper vector -> array (resolve teu LNK2001 com pybind)
 TrajectoryNewton simulate_newton_rk4(
     double mu,
     const std::vector<double>& state0,
@@ -132,9 +154,14 @@ TrajectoryNewton simulate_newton_rk4(
     double tf,
     const SolverCfg& cfg
 ) {
-    if (state0.size() != 4) throw std::runtime_error("state0 must be [x,y,vx,vy] (size==4)");
-    std::array<double,4> a { state0[0], state0[1], state0[2], state0[3] };
-    return simulate_newton_rk4(mu, a, t0, tf, cfg);
+    if (state0.size() != 4) {
+        TrajectoryNewton out;
+        out.status = OrbitStatus::ERROR;
+        out.message = "state0 must have size 4 [x,y,vx,vy]";
+        return out;
+    }
+    std::array<double,4> arr { state0[0], state0[1], state0[2], state0[3] };
+    return simulate_newton_rk4(mu, arr, t0, tf, cfg);
 }
 
 } // namespace relorbit

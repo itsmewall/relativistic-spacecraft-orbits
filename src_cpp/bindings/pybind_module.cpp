@@ -56,7 +56,8 @@ PYBIND11_MODULE(_engine, m) {
     py::class_<relorbit::SolverCfg>(m, "SolverCfg")
         .def(py::init<>())
         .def_readwrite("dt", &relorbit::SolverCfg::dt)
-        .def_readwrite("n_steps", &relorbit::SolverCfg::n_steps);
+        .def_readwrite("n_steps", &relorbit::SolverCfg::n_steps)
+        .def_readwrite("record_every", &relorbit::SolverCfg::record_every);
 
     py::class_<relorbit::TrajectoryNewton>(m, "TrajectoryNewton")
         .def_readonly("t", &relorbit::TrajectoryNewton::t)

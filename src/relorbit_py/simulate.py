@@ -53,8 +53,12 @@ def _make_solver_cfg(case: Dict[str, Any]) -> Any:
 
     n_steps = _get_solver_field(case, "n_steps", 0)
     cfg.n_steps = int(n_steps) if n_steps is not None else 0
+    
+    # NOVO: Injeção do stride para economia de RAM
+    re = _get_solver_field(case, "record_every", 1)
+    cfg.record_every = int(re) if re is not None else 1
+    
     return cfg
-
 
 def _pick_pr0(case: Dict[str, Any], params: Dict[str, Any]) -> float:
     # prioridade: case.pr0 > params.pr0 > radial_dir > 0.0
