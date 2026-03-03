@@ -12,6 +12,7 @@ namespace relorbit {
 struct TrajectorySchwarzschildEq {
     std::vector<double> tau;
     std::vector<double> r;
+    std::vector<double> mass;
     std::vector<double> phi;
     std::vector<double> tcoord;
     std::vector<double> vcoord;
@@ -39,7 +40,7 @@ struct TrajectorySchwarzschildEq {
     OrbitStatus status = OrbitStatus::ERROR;
     std::string message;
     
-    double M = 0.0;
+    double M = 1.0;
     double E = 0.0;
     double L = 0.0;
     double r0 = 0.0;

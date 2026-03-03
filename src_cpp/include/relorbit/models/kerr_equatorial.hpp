@@ -16,6 +16,7 @@ struct TrajectoryKerrEq {
     std::vector<double> tcoord;
     std::vector<double> vcoord; 
     std::vector<double> pr;
+    std::vector<double> mass;
 
     std::vector<double> epsilon; 
     std::vector<double> E_series;
@@ -44,7 +45,7 @@ struct TrajectoryKerrEq {
     OrbitStatus status = OrbitStatus::ERROR;
     std::string message;
 
-    double M = 0.0;
+    double M = 1.0;
     double a = 0.0;
     double E = 0.0;
     double L = 0.0;

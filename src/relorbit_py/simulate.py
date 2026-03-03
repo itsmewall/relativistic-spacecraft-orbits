@@ -9,6 +9,7 @@ import relorbit_py as rp
 
 
 def load_cases_yaml(path: str | Path) -> Dict[str, Any]:
+    """Carrega o arquivo de configuração (cases.yaml ou mission.yaml)."""
     path = Path(path)
     with path.open("r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -18,6 +19,7 @@ def load_cases_yaml(path: str | Path) -> Dict[str, Any]:
 
 
 def _get_solver_field(case: Dict[str, Any], key: str, default: Any = None) -> Any:
+    """Busca campos no bloco 'solver' ou na raiz do caso para retrocompatibilidade."""
     if isinstance(case.get("solver"), dict) and key in case["solver"]:
         return case["solver"][key]
     if key in case:
@@ -26,6 +28,7 @@ def _get_solver_field(case: Dict[str, Any], key: str, default: Any = None) -> An
 
 
 def _get_span(case: Dict[str, Any]) -> Tuple[float, float]:
+    """Extrai o intervalo de tempo (span) suportando formatos novos e legados."""
     if "span" in case:
         a, b = case["span"]
         return float(a), float(b)
@@ -39,7 +42,28 @@ def _get_span(case: Dict[str, Any]) -> Tuple[float, float]:
     )
 
 
+def _setup_maneuvers(case: Dict[str, Any], cfg: Any) -> None:
+    """
+    Traduz a lista de manobras do YAML para objetos C++ Maneuver.
+    Essencial para o planejamento de missões (Item 4 do Plano de Ação).
+    """
+    eng = rp.get_engine()
+    # Busca manobras no bloco solver ou na raiz do caso
+    maneuver_list = _get_solver_field(case, "maneuvers", [])
+    
+    if not isinstance(maneuver_list, list):
+        return
+
+    for m_data in maneuver_list:
+        m = eng.Maneuver()
+        m.tau = float(m_data.get("tau", 0.0))
+        m.dv_r = float(m_data.get("dv_r", 0.0))
+        m.dv_phi = float(m_data.get("dv_phi", 0.0))
+        cfg.maneuvers.append(m)
+
+
 def _make_solver_cfg(case: Dict[str, Any]) -> Any:
+    """Cria e configura o objeto SolverCfg para a engine C++."""
     eng = rp.get_engine()
     cfg = eng.SolverCfg()
 
@@ -47,21 +71,25 @@ def _make_solver_cfg(case: Dict[str, Any]) -> Any:
     if dt is None:
         raise KeyError(
             f"dt ausente no caso '{case.get('name','<sem-nome>')}'. "
-            "Esperado em case.solver.dt (novo) ou case.dt (legado)."
+            "Esperado em case.solver.dt ou case.dt."
         )
     cfg.dt = float(dt)
 
     n_steps = _get_solver_field(case, "n_steps", 0)
     cfg.n_steps = int(n_steps) if n_steps is not None else 0
     
-    # NOVO: Injeção do stride para economia de RAM
+    # Risco 1: Stride para economia de RAM em missões longas
     re = _get_solver_field(case, "record_every", 1)
     cfg.record_every = int(re) if re is not None else 1
     
+    # Item 4: Configuração de manobras impulsivas
+    _setup_maneuvers(case, cfg)
+    
     return cfg
 
+
 def _pick_pr0(case: Dict[str, Any], params: Dict[str, Any]) -> float:
-    # prioridade: case.pr0 > params.pr0 > radial_dir > 0.0
+    """Define o momento radial inicial (pr0) com base em prioridades ou direção."""
     if "pr0" in case:
         return float(case["pr0"])
     if "pr0" in params:
@@ -81,12 +109,14 @@ def _pick_pr0(case: Dict[str, Any], params: Dict[str, Any]) -> float:
 
 
 def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
+    """Ponto de entrada principal para rodar uma simulação (Newton, Schwarzschild ou Kerr)."""
     eng = rp.get_engine()
 
     model = case.get("model", suite_name)
     cfg = _make_solver_cfg(case)
     a0, af = _get_span(case)
 
+    # 1. Modelo Newtoniano
     if model == "newton":
         params = case.get("params", {}) or {}
         mu = float(params.get("mu", case.get("mu", 1.0)))
@@ -94,14 +124,8 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
         t0, tf = a0, af
         return eng.simulate_newton_rk4(mu, state0, t0, tf, cfg)
 
-    if model == "schwarzschild":
-        if not hasattr(eng, "simulate_schwarzschild_equatorial_rk4"):
-            avail = [n for n in dir(eng) if "schw" in n.lower() or "schwarz" in n.lower()]
-            raise AttributeError(
-                "Engine não expõe simulate_schwarzschild_equatorial_rk4. "
-                f"Encontradas parecidas: {avail}"
-            )
-
+    # 2. Modelo Schwarzschild
+    if model in ("schwarzschild", "schwarzschild_equatorial"):
         params = case.get("params", {}) or {}
         M = float(params.get("M", case.get("M", 1.0)))
         E = float(params.get("E", case.get("E")))
@@ -109,42 +133,21 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
 
         state0 = case.get("state0", None)
         if not isinstance(state0, list) or len(state0) < 2:
-            raise ValueError(
-                "Para Schwarzschild, state0 deve ser lista com pelo menos [r0, phi0]. "
-                f"Recebido: {state0}"
-            )
+            raise ValueError(f"state0 inválido para Schwarzschild em '{case.get('name')}'.")
 
-        r0 = float(state0[0])
-        phi0 = float(state0[1])
-
+        r0, phi0 = float(state0[0]), float(state0[1])
         pr0 = _pick_pr0(case, params)
-        tau0, tauf = a0, af
-
-        capture_r = float(params.get("capture_r", case.get("capture_r", 2.0)))
-        capture_eps = float(params.get("capture_eps", case.get("capture_eps", 1e-12)))
+        capture_r = float(params.get("capture_r", 2.0))
+        capture_eps = float(params.get("capture_eps", 1e-12))
 
         return eng.simulate_schwarzschild_equatorial_rk4(
-            M=M,
-            E=E,
-            L=L,
-            r0=r0,
-            phi0=phi0,
-            pr0=pr0,
-            tau0=tau0,
-            tauf=tauf,
-            cfg=cfg,
-            capture_r=capture_r,
-            capture_eps=capture_eps,
+            M=M, E=E, L=L, r0=r0, phi0=phi0, pr0=pr0,
+            tau0=a0, tauf=af, cfg=cfg,
+            capture_r=capture_r, capture_eps=capture_eps
         )
 
+    # 3. Modelo Kerr
     if model in ("kerr", "kerr_equatorial"):
-        if not hasattr(eng, "simulate_kerr_equatorial_rk4"):
-            avail = [n for n in dir(eng) if "kerr" in n.lower()]
-            raise AttributeError(
-                "Engine não expõe simulate_kerr_equatorial_rk4. "
-                f"Encontradas parecidas: {avail}"
-            )
-
         params = case.get("params", {}) or {}
         M = float(params.get("M", case.get("M", 1.0)))
         a = float(params.get("a", case.get("a", 0.0)))
@@ -153,33 +156,17 @@ def simulate_case(case: Dict[str, Any], suite_name: str) -> Any:
 
         state0 = case.get("state0", None)
         if not isinstance(state0, list) or len(state0) < 2:
-            raise ValueError(
-                "Para Kerr, state0 deve ser lista com pelo menos [r0, phi0]. "
-                f"Recebido: {state0}"
-            )
+            raise ValueError(f"state0 inválido para Kerr em '{case.get('name')}'.")
 
-        r0 = float(state0[0])
-        phi0 = float(state0[1])
-
+        r0, phi0 = float(state0[0]), float(state0[1])
         pr0 = _pick_pr0(case, params)
-        tau0, tauf = a0, af
-
-        capture_r = float(params.get("capture_r", case.get("capture_r", 2.0)))
-        capture_eps = float(params.get("capture_eps", case.get("capture_eps", 1e-12)))
+        capture_r = float(params.get("capture_r", 2.0))
+        capture_eps = float(params.get("capture_eps", 1e-12))
 
         return eng.simulate_kerr_equatorial_rk4(
-            M=M,
-            a=a,
-            E=E,
-            L=L,
-            r0=r0,
-            phi0=phi0,
-            pr0=pr0,
-            tau0=tau0,
-            tauf=tauf,
-            cfg=cfg,
-            capture_r=capture_r,
-            capture_eps=capture_eps,
+            M=M, a=a, E=E, L=L, r0=r0, phi0=phi0, pr0=pr0,
+            tau0=a0, tauf=af, cfg=cfg,
+            capture_r=capture_r, capture_eps=capture_eps
         )
 
-    raise ValueError(f"Modelo desconhecido no caso '{case.get('name','<sem-nome>')}': {model}")
+    raise ValueError(f"Modelo desconhecido: {model}")

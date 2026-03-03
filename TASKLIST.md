@@ -102,20 +102,31 @@
 
 ### B - Missão e propulsão (P1)
 
-    4. Manobras impulsivas (Δv)
-        * Implementar em nível “missão”: aplicar Δv em instantes/eventos (ex.: no periapse).
-        * Onde: Python (mission runner) primeiro; depois otimizar em C++ se precisar.
-        * Critério: tabela de Δv budget e mudança clara nos elementos/orbita.
+    #### 4. Manobras impulsivas ($\Delta v$) e Gerenciamento de Massa
 
-    5. Low-thrust (thrust contínuo) + consumo de massa
-        * Modelo simples: força constante ou throttle controlada + equação de massa (Tsiolkovsky contínuo simplificado).
-        * Onde: um novo integrador/força no Newton primeiro; depois versão GR (mais avançada).
-        * Critério: trajetória muda de forma previsível, consumo de propelente coerente.
+    * Implementação: Aplicar saltos instantâneos no vetor de estado $[p_r, L]$.
+    * Novidade: Introduzir a **massa da sonda ($m$)** como variável. Cada $\Delta v$ deve calcular o consumo de combustível pela Equação de Tsiolkovsky: $\Delta m = m_{atual} \cdot (1 - e^{-\Delta v / (I_{sp} \cdot g_0)})$.
+    * Onde: Lógica de consumo no Python (`mission.py`) integrando com as unidades do `units.py`.
+    * Critério: Tabela de "Delta-v Budget" e "Mass Budget". A simulação deve falhar se o combustível acabar antes da manobra final.
 
-    6. Planejamento: targeting básico (Lambert / “match periapse”)
-    * Newton: Lambert clássico ou solver simples para atingir periapse/rendezvous.
-    * GR: ao menos targeting numérico por shooting (varrer E/L ou Δv até atingir um periapse-alvo).
-    * Critério: dado um alvo (r_p desejado), o solver encontra parâmetros e reporta erro final.
+    #### 5. Low-thrust (thrust contínuo) + Dinâmica Não-Geodésica
+
+    * Modelo: Adicionar um termo de força própria $f^\mu$ (aceleração do motor) nas equações diferenciais. A trajetória deixa de ser uma geodésica pura (queda livre) e passa a ser uma **geodésica forçada**.
+    * Novidade: Implementar o empuxo em componentes: *Radial* (para mudar a excentricidade rapidamente) e Tangencial (para ganhar energia orbital/subir a órbita).
+    * Onde: Novo integrador em C++ que aceita um parâmetro `thrust_vector` e `Isp`.
+    * Critério: Demonstração de **Orbit Raising** (subida em espiral). Comparar o tempo de subida de $6M$ para $10M$ usando diferentes níveis de aceleração.
+
+    #### 6. Planejamento e Targeting (Targeting Numérico)
+
+    * Lambert Relativístico: Como não há solução fechada, implementar um **Solver de Shooting** (Bisseção ou Newton-Raphson) em Python.
+    * Cenário de Missão: "Dado que estou em $r=20M$, qual $\Delta v$ devo aplicar para que meu periapse seja exatamente $3M$ (limite da ISCO de Schwarzschild)?"
+    * Critério: O planejador deve sugerir a manobra e a simulação deve confirmar a chegada no alvo com erro inferior a 0.1%.
+
+    #### 7. Telemetria e Observáveis (O toque final de Realismo)
+
+    * Redshift e Doppler: Calcular a razão $dt/d\tau$ para cada ponto da trajetória. Isso simula o atraso de comunicação e a mudança de frequência dos sinais enviados pela sonda para a base na Terra.
+    * Visibilidade: Implementar o ângulo de visibilidade (horizonte local) para saber se a sonda está "escondida" atrás do buraco negro em relação a um observador distante.
+    * Critério: Gráfico de "Communication Latency" (atraso de sinal) conforme a sonda mergulha no potencial gravitacional.
 
 ### C - Atitude 6-DOF e GNC (P1)
 
@@ -136,7 +147,7 @@
         * Depois LQR (se quiser brilhar): linearização local e ganho.
         * Critério: plot do erro angular caindo e torque dentro de limites.
 
-    10. “Perfil de missão” real (o teu diferencial)
+    10. “Perfil de missão” real
 
     * Definir uma missão demo:
 

@@ -13,7 +13,7 @@
 
 namespace py = pybind11;
 
-// toy antigo (sanity)
+// toy antigo (sanity check)
 static std::vector<double> rk4_decay(double y0, double k, double t0, double tf, int n_steps) {
     if (n_steps <= 0) throw std::runtime_error("n_steps must be > 0");
     double dt = (tf - t0) / static_cast<double>(n_steps);
@@ -47,23 +47,37 @@ PYBIND11_MODULE(_engine, m) {
           py::arg("y0"), py::arg("k"), py::arg("t0"), py::arg("tf"), py::arg("n_steps"),
           "Integrate dy/dt=-k*y with RK4 fixed-step.");
 
+    // ============================================================
+    // BINDING: ENUMS E CONFIGURAÇÕES DE MISSÃO
+    // ============================================================
     py::enum_<relorbit::OrbitStatus>(m, "OrbitStatus")
         .value("BOUND", relorbit::OrbitStatus::BOUND)
         .value("UNBOUND", relorbit::OrbitStatus::UNBOUND)
         .value("CAPTURE", relorbit::OrbitStatus::CAPTURE)
         .value("ERROR", relorbit::OrbitStatus::ERROR);
 
+    py::class_<relorbit::Maneuver>(m, "Maneuver")
+        .def(py::init<>())
+        .def_readwrite("tau", &relorbit::Maneuver::tau)
+        .def_readwrite("dv_r", &relorbit::Maneuver::dv_r)
+        .def_readwrite("dv_phi", &relorbit::Maneuver::dv_phi);
+
     py::class_<relorbit::SolverCfg>(m, "SolverCfg")
         .def(py::init<>())
         .def_readwrite("dt", &relorbit::SolverCfg::dt)
         .def_readwrite("n_steps", &relorbit::SolverCfg::n_steps)
-        .def_readwrite("record_every", &relorbit::SolverCfg::record_every);
+        .def_readwrite("record_every", &relorbit::SolverCfg::record_every)
+        .def_readwrite("maneuvers", &relorbit::SolverCfg::maneuvers);
 
+    // ============================================================
+    // BINDING: NEWTON (CLÁSSICO)
+    // ============================================================
     py::class_<relorbit::TrajectoryNewton>(m, "TrajectoryNewton")
         .def_readonly("t", &relorbit::TrajectoryNewton::t)
         .def_readonly("y", &relorbit::TrajectoryNewton::y)
         .def_readonly("energy", &relorbit::TrajectoryNewton::energy)
         .def_readonly("h", &relorbit::TrajectoryNewton::h)
+        .def_readonly("mass", &relorbit::TrajectoryNewton::mass)
         .def_readonly("status", &relorbit::TrajectoryNewton::status)
         .def_readonly("message", &relorbit::TrajectoryNewton::message);
 
@@ -87,6 +101,7 @@ PYBIND11_MODULE(_engine, m) {
         .def_property_readonly("t", [](const relorbit::TrajectorySchwarzschildEq& tr) { return tr.tcoord; })
         .def_property_readonly("v", [](const relorbit::TrajectorySchwarzschildEq& tr) { return tr.vcoord; })
         .def_readonly("pr", &relorbit::TrajectorySchwarzschildEq::pr)
+        .def_readonly("mass", &relorbit::TrajectorySchwarzschildEq::mass)
         .def_readonly("epsilon", &relorbit::TrajectorySchwarzschildEq::epsilon)
         .def_readonly("E_series", &relorbit::TrajectorySchwarzschildEq::E_series)
         .def_readonly("L_series", &relorbit::TrajectorySchwarzschildEq::L_series)
@@ -138,6 +153,7 @@ PYBIND11_MODULE(_engine, m) {
         .def_property_readonly("t", [](const relorbit::TrajectoryKerrEq& tr) { return tr.tcoord; })
         .def_property_readonly("v", [](const relorbit::TrajectoryKerrEq& tr) { return tr.vcoord; })
         .def_readonly("pr", &relorbit::TrajectoryKerrEq::pr)
+        .def_readonly("mass", &relorbit::TrajectoryKerrEq::mass)
         .def_readonly("epsilon", &relorbit::TrajectoryKerrEq::epsilon)
         .def_readonly("E_series", &relorbit::TrajectoryKerrEq::E_series)
         .def_readonly("L_series", &relorbit::TrajectoryKerrEq::L_series)
