@@ -76,12 +76,12 @@
 
 #### v3
 
-    1. Extração de Invariantes Físicos (Verificação de Erro)
+    1. Extração de Invariantes Físicos (Verificação de Erro) 🆗
 
         * O problema: Integradores numéricos acumulam erros de truncamento que podem criar trajetórias fisicamente impossíveis. Sem um gráfico de erro de conservação, não há prova de que a sonda não está ganhando ou perdendo energia artificialmente devido às limitações do algoritmo RK4.
         * A solução: Implementar o monitoramento do invariante $\epsilon = p_\mu p^\mu$, gerando um gráfico de $\Delta \epsilon$ vs Tempo para provar a estabilidade numérica e o rigor científico da simulação.
 
-    2. Análise de Redshift Assintótico
+    2. Análise de Redshift Assintótico 🆗
 
         * O problema: Gráficos de redshift em escala linear escondem o comportamento matemático real perto do horizonte de eventos, dificultando a validação da métrica. Sem uma análise de lei de potência, o trabalho não confirma se a latência diverge conforme previsto pela Relatividade Geral.
         * A solução: Realizar a análise em escala log-log do Redshift em função da distância ao horizonte $(r - r_s)$, demonstrando visualmente que o atraso de sinal segue a divergência teórica exata.
@@ -90,6 +90,28 @@
 
         * O problema: A visibilidade baseada em oclusão geométrica (linha reta) é fisicamente incorreta em campos fortes, pois ignora que a gravidade curva a luz. Isso invalida qualquer análise de link de comunicação real entre a sonda e a Terra.
         * A solução: Implementar o cálculo do Cone de Escape de Fótons, definindo a visibilidade com base no ângulo crítico de emissão para determinar se o sinal de rádio consegue vencer a curvatura do espaço-tempo e atingir o infinito.
+
+#### v4
+
+    1. Sensibilidade do Custo Energético vs. Spin
+
+        * O problema: Simulações isoladas não demonstram como a rotação do buraco negro afeta a viabilidade técnica de uma missão espacial. Sem uma variação paramétrica do spin, o trabalho não quantifica a economia de combustível (ou o custo extra) gerada pelo arraste do espaço-tempo (frame-dragging) em órbitas prógradas e retrógradas.
+        * A solução: Implementar um Estudo de Sensibilidade Paramétrica que execute simulações em lote variando o spin de $a=0$ a $a=0.99$. O resultado será um gráfico de Delta-V total vs. Spin, provando como o parâmetro de Kerr dita as especificações de hardware da sonda.
+
+    2. Link Budget Relativístico e Capacidade de Canal
+
+        *O problema: O cálculo do Redshift atual é apenas geométrico e não traduz o impacto real na comunicação. Para a engenharia, é necessário saber se a dilatação temporal reduz a taxa de transmissão (bitrate) a ponto de inviabilizar o envio de dados científicos conforme a sonda se aproxima do horizonte.
+        * A solução: Modelar o Link Budget Relativístico, onde a frequência recebida ($f_{obs}$) dita a largura de banda disponível. Gerar um gráfico de Capacidade de Canal (bits/s) vs. Raio ($r$), transformando a telemetria em um dado de projeto de telecomunicações espaciais.
+
+    3. Geodésicas Nulas (Light Bending) na Visibilidade
+
+        * O problema: A visibilidade baseada em oclusão linear ignora que a luz faz curvas em campos gravitacionais fortes. Isso pode levar a conclusões erradas no TCC, como afirmar que a sonda está oculta quando, na verdade, a luz contorna o buraco negro e atinge o observador (Lente Gravitacional).
+        * A solução: Integrar as Geodésicas Nulas para o sinal de rádio, calculando a trajetória do fóton da sonda ao observador. Isso permitirá definir o Cone de Aceitação de Sinal, garantindo que a visibilidade reportada no Item 7 seja fisicamente rigorosa.
+
+    4. Otimização de Trajetória de Consumo Mínimo
+
+        * O problema: O Targeting atual por bisseção encontra uma manobra funcional, mas não necessariamente a mais eficiente. Em missões reais, é vital minimizar a integral do empuxo para maximizar a vida útil da sonda.
+        * A solução: Implementar um algoritmo de Otimização de Trajetória (como o método de gradiente ou algoritmos genéticos simples) para encontrar o perfil de empuxo que atinge o alvo com o mínimo consumo de massa.
 
 
 ## FEATURES

@@ -636,6 +636,353 @@ def plot_invariant(result: MissionResult, outdir: str, m_cfg: Dict[str, Any]) ->
 
 
 # ============================================================
+# Análise de Redshift Assintótico (log-log)
+# ============================================================
+
+def _ut_theoretical(r: np.ndarray, M: float, E: float,
+                    a: float = 0.0, L: float = 0.0) -> np.ndarray:
+    """
+    dt/dτ teórico em função de r.
+
+    Schwarzschild (a=0):
+        u^t = E / A           A = 1 - 2M/r
+        → perto do horizonte: u^t ≈ E * 2M / δr   (lei de potência, exp = -1)
+
+    Kerr (a≠0, equatorial θ=π/2):
+        u^t = [ (r²+a²+2Ma²/r)·E − 2Ma·L/r ] / Δ    Δ = r²−2Mr+a²
+        → perto de r_+: mesma divergência ~1/δr   (exp = -1)
+    """
+    r2 = r * r
+    if abs(a) < 1e-14:
+        A = 1.0 - 2.0 * M / r
+        A_safe = np.where(np.abs(A) > 1e-300, A, 1e-300)
+        return E / A_safe
+    else:
+        a2 = a * a
+        Delta = r2 - 2.0 * M * r + a2
+        D_safe = np.where(np.abs(Delta) > 1e-300, Delta, 1e-300)
+        return ((r2 + a2 + 2.0 * M * a2 / r) * E - 2.0 * M * a * L / r) / D_safe
+
+
+def _fit_powerlaw(x: np.ndarray, y: np.ndarray,
+                  x_min: float = 0.0, x_max: float = np.inf,
+                  min_points: int = 10):
+    """
+    Ajusta y = A * x^β em escala log-log via regressão linear.
+
+    Retorna (A, beta, r2, x_fit, y_fit) ou None se dados insuficientes.
+    """
+    mask = (x > x_min) & (x < x_max) & np.isfinite(x) & np.isfinite(y) & (x > 0) & (y > 0)
+    if mask.sum() < min_points:
+        return None
+    lx = np.log10(x[mask])
+    ly = np.log10(y[mask])
+    coeffs = np.polyfit(lx, ly, 1)
+    beta = coeffs[0]
+    log_A = coeffs[1]
+    A = 10.0 ** log_A
+    # R² em log-log
+    ly_pred = np.polyval(coeffs, lx)
+    ss_res = np.sum((ly - ly_pred) ** 2)
+    ss_tot = np.sum((ly - ly.mean()) ** 2)
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+    # Curva de ajuste para plot
+    x_fit = np.logspace(np.log10(x[mask].min()), np.log10(x[mask].max()), 400)
+    y_fit = A * x_fit ** beta
+    return A, beta, r2, x_fit, y_fit
+
+
+def plot_redshift_asymptotic(result: MissionResult, outdir: str,
+                              m_cfg: Dict[str, Any]) -> str:
+    """
+    Análise de redshift gravitacional assintótico perto do horizonte.
+
+    Física esperada — lei de potência:
+    ─────────────────────────────────
+    Schwarzschild (a=0):
+        u^t = dt/dτ = E / (1 − 2M/r) = E·r / δr      δr = r − 2M
+        log-log:  log(u^t) = −1·log(δr) + log(E·2M)
+        → expoente teórico = −1
+
+    Kerr (a≠0):
+        u^t = [(r²+a²+2Ma²/r)·E − 2MaL/r] / Δ        Δ = (r−r₊)(r−r₋)
+        perto de r₊:  u^t ~ const / (r − r₊)
+        → expoente teórico = −1   (mesma divergência)
+
+    Layout — 3 painéis verticais:
+    ┌────────────────────────────────────────────┐
+    │ Painel 1: log-log  u^t vs δr              │
+    │   • Dados medidos (scatter colorido por τ) │
+    │   • Curva teórica exata                    │
+    │   • Ajuste de lei de potência (regressão)  │
+    │   • Anotação: expoente β e R²              │
+    ├────────────────────────────────────────────┤
+    │ Painel 2: log-log  latência vs δr          │
+    │   (t_coord − τ) — divergência logarítmica  │
+    │   Referência: c·ln(1/δr) (Schwarzschild)   │
+    ├────────────────────────────────────────────┤
+    │ Painel 3: Resíduo (u^t_med/u^t_teo − 1)   │
+    │   Erro relativo em % — valida a métrica    │
+    │   Banda ±0.1 % e ±1 %                      │
+    └────────────────────────────────────────────┘
+    """
+    params  = m_cfg.get("params", {})
+    M       = float(params.get("M",   1.0))
+    E_init  = float(params.get("E",   result.E_initial))
+    L_init  = float(params.get("L",   result.L_initial))
+    a       = float(params.get("a",   0.0))
+    is_kerr = abs(a) > 1e-10
+
+    r_hor   = _horizon_radius(params)
+    is_lt   = "lowthrust" in result.model.lower() or "_lt" in result.model.lower()
+
+    # ── Concatenar dados de todos os segmentos ─────────────────
+    tau_list, r_list, t_list, ut_list = [], [], [], []
+
+    for seg in result.segments:
+        tau_seg = np.array(seg.tau,  dtype=float)
+        r_seg   = np.array(seg.r,    dtype=float)
+
+        # tcoord
+        if hasattr(seg, "tcoord"):
+            t_seg = np.array(seg.tcoord, dtype=float)
+        elif hasattr(seg, "t"):
+            t_seg = np.array(seg.t, dtype=float)
+        else:
+            t_seg = np.full(len(tau_seg), np.nan)
+
+        # dt/dτ: preferir teórico, senão derivada numérica
+        if hasattr(seg, "ut_theory"):
+            ut_seg = np.array(seg.ut_theory, dtype=float)
+        elif hasattr(seg, "ut_fd"):
+            ut_seg = np.array(seg.ut_fd, dtype=float)
+        else:
+            # Derivada central de tcoord(tau)
+            ut_seg = np.gradient(t_seg, tau_seg)
+
+        tau_list.append(tau_seg)
+        r_list.append(r_seg)
+        t_list.append(t_seg)
+        ut_list.append(ut_seg)
+
+    if not tau_list:
+        print(f"   [redshift] Sem segmentos para {result.name}.")
+        return ""
+
+    tau_all = np.concatenate(tau_list)
+    r_all   = np.concatenate(r_list)
+    t_all   = np.concatenate(t_list)
+    ut_all  = np.concatenate(ut_list)
+
+    delta_r  = r_all - r_hor          # distância ao horizonte
+    latency  = t_all - tau_all        # atraso de sinal
+
+    # ── Filtragem: apenas pontos físicos com δr > 0 ────────────
+    valid = (delta_r > 1e-14) & np.isfinite(ut_all) & (ut_all > 0) & np.isfinite(latency)
+    if valid.sum() < 5:
+        print(f"   [redshift] Dados insuficientes perto do horizonte em {result.name}.")
+        return ""
+
+    dr_v  = delta_r[valid]
+    ut_v  = ut_all[valid]
+    lat_v = latency[valid]
+    tau_v = tau_all[valid]
+
+    # ── Curva teórica exata ────────────────────────────────────
+    dr_range  = np.logspace(
+        np.log10(max(dr_v.min(), 1e-6)),
+        np.log10(dr_v.max() * 1.2),
+        600,
+    )
+    r_range   = dr_range + r_hor
+    ut_theory = _ut_theoretical(r_range, M, E_init, a=a, L=L_init)
+    # Latência teórica Schwarzschild: Δt ≈ − E·r_s·ln(δr/r_s) + const
+    if not is_kerr:
+        lat_ref_scale = float(E_init * 2.0 * M)
+        lat_theory    = lat_ref_scale * (-np.log(dr_range / (2.0 * M)))
+        lat_theory[lat_theory < 0] = np.nan
+    else:
+        lat_theory = None
+
+    # ── Ajuste de lei de potência (região próxima ao horizonte) ─
+    # Usa apenas δr < 20% de r_hor para a região assintótica
+    dr_cut  = r_hor * 0.20
+    fit_res = _fit_powerlaw(dr_v, ut_v, x_max=dr_cut, min_points=8)
+    if fit_res is None:
+        # Tenta com mais pontos (toda a faixa)
+        fit_res = _fit_powerlaw(dr_v, ut_v, min_points=5)
+
+    # ── Gradiente de cor: τ para mostrar evolução temporal ──────
+    tau_norm = (tau_v - tau_v.min()) / max(tau_v.max() - tau_v.min(), 1e-14)
+
+    # ── Figura ──────────────────────────────────────────────────
+    fig, axes = plt.subplots(3, 1, figsize=(11, 12),
+                             gridspec_kw={"height_ratios": [2.5, 1.5, 1.5]})
+    fig.subplots_adjust(hspace=0.38)
+    ax_ll, ax_lat, ax_res = axes
+
+    model_lbl = ("Kerr" if is_kerr else "Schwarzschild") + (" LT" if is_lt else "")
+    fig.suptitle(
+        f"Redshift Gravitacional Assintótico — {result.name}\n"
+        f"Modelo: {model_lbl}  |  r_hor = {r_hor:.4f} M  |  E = {E_init:.5f}",
+        fontsize=11, fontweight="bold", y=0.98,
+    )
+
+    # ══════════════════════════════════════════════════════════
+    # Painel 1: log-log   u^t vs δr
+    # ══════════════════════════════════════════════════════════
+    sc = ax_ll.scatter(
+        dr_v, ut_v,
+        c=tau_norm, cmap="plasma", s=6, alpha=0.55, zorder=4,
+        label="u^t medido",
+    )
+    cbar = fig.colorbar(sc, ax=ax_ll, pad=0.01, fraction=0.025)
+    cbar.set_label("τ normalizado", fontsize=8)
+
+    ax_ll.loglog(r_range, ut_theory,
+                 color="#e74c3c", linewidth=2.0, zorder=5,
+                 label=f"Teórico: u^t = f(r) [{model_lbl}]")
+
+    # Linha de referência pura  u^t ~ A/δr  (expoente -1)
+    A_ref    = float(E_init * r_hor)  # u^t ≈ E·r_hor / δr
+    ut_ref   = A_ref / dr_range
+    ax_ll.loglog(dr_range, ut_ref,
+                 color="#7f8c8d", linewidth=1.2, linestyle=":",
+                 zorder=3, label=r"Referência: $E\cdot r_+/\delta r$ (exp = −1)")
+
+    # Ajuste numérico
+    fit_txt = "Ajuste: dados insuficientes"
+    if fit_res is not None:
+        A_fit, beta_fit, r2_fit, x_fit, y_fit = fit_res
+        ax_ll.loglog(x_fit, y_fit,
+                     color="#27ae60", linewidth=2.2, linestyle="--",
+                     zorder=6, label=f"Ajuste: β = {beta_fit:.4f}  (R²={r2_fit:.6f})")
+        dev = abs(beta_fit - (-1.0))
+        fit_txt = (
+            f"Lei de potência  u^t = {A_fit:.4g} · δr^β\n"
+            f"  β_ajustado = {beta_fit:+.6f}\n"
+            f"  β_teórico  = −1.000000\n"
+            f"  |Δβ|       = {dev:.2e}\n"
+            f"  R²         = {r2_fit:.8f}"
+        )
+
+    ax_ll.set_xscale("log")
+    ax_ll.set_yscale("log")
+    ax_ll.set_xlabel("δr = r − r_hor  [M]", fontsize=9)
+    ax_ll.set_ylabel("u^t = dt/dτ  (fator de redshift)", fontsize=9)
+    ax_ll.set_title("Escala log-log: u^t vs distância ao horizonte", fontsize=9)
+    ax_ll.legend(fontsize=8, loc="upper right")
+    ax_ll.grid(True, which="both", linestyle=":", alpha=0.4)
+
+    # Badge de resultado
+    ax_ll.text(
+        0.02, 0.97, fit_txt,
+        transform=ax_ll.transAxes,
+        ha="left", va="top", fontsize=8, family="monospace",
+        bbox=dict(boxstyle="round,pad=0.4", fc="#eafaf1", ec="#27ae60", alpha=0.92),
+        zorder=7,
+    )
+
+    # ══════════════════════════════════════════════════════════
+    # Painel 2: latência vs δr (log-log ou semilogy)
+    # ══════════════════════════════════════════════════════════
+    pos_lat = lat_v > 0
+    if pos_lat.sum() > 3:
+        ax_lat.scatter(dr_v[pos_lat], lat_v[pos_lat],
+                       c=tau_norm[pos_lat], cmap="viridis",
+                       s=5, alpha=0.5, zorder=4, label="Latência medida")
+        ax_lat.set_xscale("log")
+        ax_lat.set_yscale("log")
+
+        if lat_theory is not None:
+            # Latitude teórica só para pontos positivos
+            valid_th = (lat_theory > 0) & np.isfinite(lat_theory)
+            if valid_th.sum() > 2:
+                ax_lat.loglog(
+                    dr_range[valid_th], lat_theory[valid_th],
+                    color="#c0392b", linewidth=1.8, linestyle="-",
+                    zorder=5, label=r"Teórico: $−E\,r_s\,\ln(\delta r / r_s)$ (Schw.)",
+                )
+    else:
+        # Se não há latência positiva, plota em escala linear
+        ax_lat.scatter(dr_v, lat_v, c=tau_norm, cmap="viridis",
+                       s=5, alpha=0.5, zorder=4, label="Latência medida")
+        ax_lat.set_xscale("log")
+
+    ax_lat.set_xlabel("δr = r − r_hor  [M]", fontsize=9)
+    ax_lat.set_ylabel("t_coord − τ  [M]", fontsize=9)
+    ax_lat.set_title(
+        r"Latência de sinal: $t_\mathrm{coord} - \tau$ vs δr"
+        "\n(divergência logarítmica — não de lei de potência)",
+        fontsize=9,
+    )
+    ax_lat.legend(fontsize=8, loc="upper right")
+    ax_lat.grid(True, which="both", linestyle=":", alpha=0.4)
+
+    # ══════════════════════════════════════════════════════════
+    # Painel 3: Resíduo relativo (u^t_medido / u^t_teórico − 1)
+    # ══════════════════════════════════════════════════════════
+    # Interpola curva teórica nos mesmos δr dos dados
+    ut_teo_at_data = _ut_theoretical(
+        np.array(dr_v + r_hor), M, E_init, a=a, L=L_init
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        residual_pct = 100.0 * (ut_v / ut_teo_at_data - 1.0)
+
+    res_finite = residual_pct[np.isfinite(residual_pct)]
+    res_rms    = float(np.sqrt(np.mean(res_finite**2))) if len(res_finite) else float("nan")
+    res_max    = float(np.max(np.abs(res_finite)))      if len(res_finite) else float("nan")
+
+    ax_res.scatter(
+        dr_v, residual_pct,
+        c=tau_norm, cmap="coolwarm", s=5, alpha=0.55, zorder=4,
+        label=f"Resíduo: RMS={res_rms:.3e}%  max={res_max:.3e}%",
+    )
+    ax_res.set_xscale("log")
+    ax_res.axhline(0.0,  color="black",   linewidth=1.0, zorder=2)
+    ax_res.axhline(+0.1, color="#27ae60", linewidth=0.9, linestyle="--",
+                   zorder=2, label="±0.1%")
+    ax_res.axhline(-0.1, color="#27ae60", linewidth=0.9, linestyle="--", zorder=2)
+    ax_res.axhline(+1.0, color="#f39c12", linewidth=0.9, linestyle=":",
+                   zorder=2, label="±1%")
+    ax_res.axhline(-1.0, color="#f39c12", linewidth=0.9, linestyle=":", zorder=2)
+    ax_res.fill_between(
+        [dr_v.min(), dr_v.max()], -0.1, 0.1,
+        color="#2ecc71", alpha=0.08, zorder=1,
+    )
+    ax_res.set_xlabel("δr = r − r_hor  [M]", fontsize=9)
+    ax_res.set_ylabel("(u^t_med / u^t_teo − 1) × 100  [%]", fontsize=9)
+    ax_res.set_title(
+        "Resíduo relativo vs previsão teórica exata\n"
+        "(valida a implementação da métrica)",
+        fontsize=9,
+    )
+    ax_res.legend(fontsize=8, loc="upper right")
+    ax_res.grid(True, which="both", linestyle=":", alpha=0.3)
+
+    # Limita escala y para não explodir com outliers perto do horizonte numérico
+    q95 = float(np.nanpercentile(np.abs(res_finite), 95)) if len(res_finite) else 5.0
+    ax_res.set_ylim(-min(q95 * 3, 20.0), min(q95 * 3, 20.0))
+
+    path = os.path.join(outdir, f"{result.name}_redshift_asymptotic.png")
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    # ── Relatório no terminal ──────────────────────────────────
+    if fit_res is not None:
+        A_fit, beta_fit, r2_fit, *_ = fit_res
+        dev = abs(beta_fit - (-1.0))
+        print(
+            f"   Redshift log-log: β={beta_fit:+.6f} (teo=-1)  "
+            f"|Δβ|={dev:.2e}  R²={r2_fit:.8f}  "
+            f"resíduo_rms={res_rms:.3e}%"
+        )
+    else:
+        print(f"   Redshift log-log: ajuste indisponível (pontos insuficientes).")
+    return path
+
+
+# ============================================================
 # Runner principal
 # ============================================================
 
@@ -658,16 +1005,21 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
             # Plots principais
             if result.segments:
                 orbit_path = plot_orbit(result, outdir, m_cfg)
-                mass_path = plot_mass(result, outdir)
-                inv_path  = plot_invariant(result, outdir, m_cfg)
-                plots_msg = f"\n   Plots: {orbit_path}, {mass_path}"
+                mass_path  = plot_mass(result, outdir)
+                inv_path   = plot_invariant(result, outdir, m_cfg)
+                plots_msg  = f"\n   Plots: {orbit_path}, {mass_path}"
                 if inv_path:
-                    plots_msg += f"\n   Invariante: {inv_path}"
+                    plots_msg += f"\n   Invariante:  {inv_path}"
                 print(plots_msg)
+
+                # Redshift assintótico (log-log + ajuste de lei de potência)
+                rs_path = plot_redshift_asymptotic(result, outdir, m_cfg)
+                if rs_path:
+                    print(f"   Redshift:    {rs_path}")
             else:
                 print(f"\n   [AVISO] Gráficos ignorados: sem segmentos gerados.")
 
-            # Telemetria (NOVO)
+            # Telemetria
             if result.segments:
                 tele_paths = plot_telemetry(result, outdir, m_cfg, observer_dir=(1.0, 0.0))
                 if tele_paths:
