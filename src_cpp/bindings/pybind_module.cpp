@@ -11,6 +11,7 @@
 #include "relorbit/models/kerr_equatorial.hpp"
 #include "relorbit/models/schwarzschild_lowthrust.hpp"
 #include "relorbit/models/kerr_lowthrust.hpp"
+#include "relorbit/models/attitude.hpp"
 
 namespace py = pybind11;
 
@@ -228,4 +229,108 @@ PYBIND11_MODULE(_engine, m) {
           py::arg("M"),py::arg("a"),py::arg("E0"),py::arg("L0"),py::arg("r0"),py::arg("phi0"),py::arg("pr0"),
           py::arg("tau0"),py::arg("tauf"),py::arg("thrust"),py::arg("cfg"),
           py::arg("capture_r")=2.0,py::arg("capture_eps")=1e-12);
-}
+
+    // ══════════════════════════════════════════════════════════
+    // ── Atitude 6-DOF com Quaternions (Item 7) ────────────────
+    // ══════════════════════════════════════════════════════════
+
+    // ── AttitudeCfg ───────────────────────────────────────────
+    py::class_<relorbit::AttitudeCfg>(m, "AttitudeCfg")
+        .def(py::init<>())
+        .def_readwrite("dt",           &relorbit::AttitudeCfg::dt)
+        .def_readwrite("n_steps",      &relorbit::AttitudeCfg::n_steps)
+        .def_readwrite("record_every", &relorbit::AttitudeCfg::record_every)
+        .def_readwrite("renorm_every", &relorbit::AttitudeCfg::renorm_every)
+        .def_readwrite("renorm_tol",   &relorbit::AttitudeCfg::renorm_tol);
+
+    // ── TorqueCfg ─────────────────────────────────────────────
+    py::class_<relorbit::TorqueCfg>(m, "TorqueCfg")
+        .def(py::init<>())
+        .def_readwrite("tx",    &relorbit::TorqueCfg::tx)
+        .def_readwrite("ty",    &relorbit::TorqueCfg::ty)
+        .def_readwrite("tz",    &relorbit::TorqueCfg::tz)
+        .def_readwrite("t_on",  &relorbit::TorqueCfg::t_on)
+        .def_readwrite("t_off", &relorbit::TorqueCfg::t_off)
+        .def("active",  &relorbit::TorqueCfg::active,  py::arg("t"))
+        .def("get_x",   &relorbit::TorqueCfg::get_x,   py::arg("t"))
+        .def("get_y",   &relorbit::TorqueCfg::get_y,   py::arg("t"))
+        .def("get_z",   &relorbit::TorqueCfg::get_z,   py::arg("t"));
+
+    // ── InertiaTensor ─────────────────────────────────────────
+    py::class_<relorbit::InertiaTensor>(m, "InertiaTensor")
+        .def(py::init<>())
+        .def_readwrite("I", &relorbit::InertiaTensor::I)
+        .def_static("diagonal",
+            &relorbit::InertiaTensor::diagonal,
+            py::arg("Ixx"), py::arg("Iyy"), py::arg("Izz"))
+        .def_static("full",
+            &relorbit::InertiaTensor::full,
+            py::arg("Ixx"), py::arg("Iyy"), py::arg("Izz"),
+            py::arg("Ixy"), py::arg("Ixz"), py::arg("Iyz"))
+        .def("T_rot",
+            &relorbit::InertiaTensor::T_rot,
+            py::arg("wx"), py::arg("wy"), py::arg("wz"))
+        .def("mul",
+            [](const relorbit::InertiaTensor& it, double vx, double vy, double vz){
+                return it.mul(vx, vy, vz);
+            },
+            py::arg("vx"), py::arg("vy"), py::arg("vz"));
+
+    // ── AttitudeState ─────────────────────────────────────────
+    py::class_<relorbit::AttitudeState>(m, "AttitudeState")
+        .def(py::init<>())
+        .def_readwrite("q0", &relorbit::AttitudeState::q0)
+        .def_readwrite("q1", &relorbit::AttitudeState::q1)
+        .def_readwrite("q2", &relorbit::AttitudeState::q2)
+        .def_readwrite("q3", &relorbit::AttitudeState::q3)
+        .def_readwrite("wx", &relorbit::AttitudeState::wx)
+        .def_readwrite("wy", &relorbit::AttitudeState::wy)
+        .def_readwrite("wz", &relorbit::AttitudeState::wz)
+        .def("qnorm",        &relorbit::AttitudeState::qnorm)
+        .def("renormalize",  &relorbit::AttitudeState::renormalize);
+
+    // ── TrajectoryAttitude ────────────────────────────────────
+    py::class_<relorbit::TrajectoryAttitude>(m, "TrajectoryAttitude")
+        .def_readonly("t",            &relorbit::TrajectoryAttitude::t)
+        .def_readonly("q0",           &relorbit::TrajectoryAttitude::q0)
+        .def_readonly("q1",           &relorbit::TrajectoryAttitude::q1)
+        .def_readonly("q2",           &relorbit::TrajectoryAttitude::q2)
+        .def_readonly("q3",           &relorbit::TrajectoryAttitude::q3)
+        .def_readonly("wx",           &relorbit::TrajectoryAttitude::wx)
+        .def_readonly("wy",           &relorbit::TrajectoryAttitude::wy)
+        .def_readonly("wz",           &relorbit::TrajectoryAttitude::wz)
+        .def_readonly("qnorm",        &relorbit::TrajectoryAttitude::qnorm)
+        .def_readonly("T_rot",        &relorbit::TrajectoryAttitude::T_rot)
+        .def_readonly("renorm_delta", &relorbit::TrajectoryAttitude::renorm_delta)
+        .def_readonly("Ixx",          &relorbit::TrajectoryAttitude::Ixx)
+        .def_readonly("Iyy",          &relorbit::TrajectoryAttitude::Iyy)
+        .def_readonly("Izz",          &relorbit::TrajectoryAttitude::Izz)
+        .def_readonly("Ixy",          &relorbit::TrajectoryAttitude::Ixy)
+        .def_readonly("Ixz",          &relorbit::TrajectoryAttitude::Ixz)
+        .def_readonly("Iyz",          &relorbit::TrajectoryAttitude::Iyz)
+        .def_readonly("status",       &relorbit::TrajectoryAttitude::status)
+        .def_readonly("message",      &relorbit::TrajectoryAttitude::message);
+
+    // ── dcm_from_quaternion ───────────────────────────────────
+    m.def("dcm_from_quaternion",
+        [](double q0, double q1, double q2, double q3) {
+            auto R = relorbit::dcm_from_quaternion(q0, q1, q2, q3);
+            return std::vector<double>(R.begin(), R.end());
+        },
+        py::arg("q0"), py::arg("q1"), py::arg("q2"), py::arg("q3"),
+        "DCM R ∈ SO(3) body→inercial a partir do quaternion. "
+        "Devolve lista de 9 floats row-major.");
+
+    // ── simulate_attitude_rk4 ─────────────────────────────────
+    m.def("simulate_attitude_rk4",
+        &relorbit::simulate_attitude_rk4,
+        py::arg("state0"),
+        py::arg("inertia"),
+        py::arg("torque"),
+        py::arg("t0"),
+        py::arg("tf"),
+        py::arg("cfg"),
+        "Integra dinâmica de atitude 6-DOF (q + ω) com RK4 de passo fixo. "
+        "Critérios: ‖q‖=1 (renormalização controlada) e T_rot conservada sem torque.");
+
+} // PYBIND11_MODULE
