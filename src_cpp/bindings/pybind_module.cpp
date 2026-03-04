@@ -232,7 +232,6 @@ PYBIND11_MODULE(_engine, m) {
 
     // ══════════════════════════════════════════════════════════
     // ── Atitude 6-DOF com Quaternions (Item 7) ────────────────
-    // ══════════════════════════════════════════════════════════
 
     // ── AttitudeCfg ───────────────────────────────────────────
     py::class_<relorbit::AttitudeCfg>(m, "AttitudeCfg")
@@ -244,22 +243,40 @@ PYBIND11_MODULE(_engine, m) {
         .def_readwrite("renorm_tol",   &relorbit::AttitudeCfg::renorm_tol);
 
     // ── TorqueCfg ─────────────────────────────────────────────
+    // tx/ty/tz são acessores (Eigen::Vector3d internamente),
+    // por isso usamos def_property em vez de def_readwrite.
     py::class_<relorbit::TorqueCfg>(m, "TorqueCfg")
         .def(py::init<>())
-        .def_readwrite("tx",    &relorbit::TorqueCfg::tx)
-        .def_readwrite("ty",    &relorbit::TorqueCfg::ty)
-        .def_readwrite("tz",    &relorbit::TorqueCfg::tz)
+        .def_property("tx",   &relorbit::TorqueCfg::tx,  &relorbit::TorqueCfg::set_tx)
+        .def_property("ty",   &relorbit::TorqueCfg::ty,  &relorbit::TorqueCfg::set_ty)
+        .def_property("tz",   &relorbit::TorqueCfg::tz,  &relorbit::TorqueCfg::set_tz)
         .def_readwrite("t_on",  &relorbit::TorqueCfg::t_on)
         .def_readwrite("t_off", &relorbit::TorqueCfg::t_off)
-        .def("active",  &relorbit::TorqueCfg::active,  py::arg("t"))
-        .def("get_x",   &relorbit::TorqueCfg::get_x,   py::arg("t"))
-        .def("get_y",   &relorbit::TorqueCfg::get_y,   py::arg("t"))
-        .def("get_z",   &relorbit::TorqueCfg::get_z,   py::arg("t"));
+        .def("active", &relorbit::TorqueCfg::active, py::arg("t"))
+        .def("get_x",  &relorbit::TorqueCfg::get_x,  py::arg("t"))
+        .def("get_y",  &relorbit::TorqueCfg::get_y,  py::arg("t"))
+        .def("get_z",  &relorbit::TorqueCfg::get_z,  py::arg("t"));
 
     // ── InertiaTensor ─────────────────────────────────────────
+    // I é agora Eigen::Matrix3d — exposta como lista de 9 floats (row-major).
     py::class_<relorbit::InertiaTensor>(m, "InertiaTensor")
         .def(py::init<>())
-        .def_readwrite("I", &relorbit::InertiaTensor::I)
+        .def_property("I",
+            [](const relorbit::InertiaTensor& it) {
+                // Matrix3d → lista Python de 9 elementos (row-major)
+                std::vector<double> v(9);
+                Eigen::Map<Eigen::Matrix<double,3,3,Eigen::RowMajor>>(v.data()) = it.I;
+                return v;
+            },
+            [](relorbit::InertiaTensor& it, const std::vector<double>& v) {
+                if (v.size() != 9) throw std::invalid_argument("I must have 9 elements");
+                it.I = Eigen::Map<const Eigen::Matrix<double,3,3,Eigen::RowMajor>>(v.data());
+            })
+        .def_property_readonly("coeff",
+            [](const relorbit::InertiaTensor& it) {
+                // Conveniência: acesso por (i,j)
+                return [&it](int i, int j) { return it.coeff(i,j); };
+            })
         .def_static("diagonal",
             &relorbit::InertiaTensor::diagonal,
             py::arg("Ixx"), py::arg("Iyy"), py::arg("Izz"))
@@ -268,26 +285,31 @@ PYBIND11_MODULE(_engine, m) {
             py::arg("Ixx"), py::arg("Iyy"), py::arg("Izz"),
             py::arg("Ixy"), py::arg("Ixz"), py::arg("Iyz"))
         .def("T_rot",
-            &relorbit::InertiaTensor::T_rot,
+            [](const relorbit::InertiaTensor& it, double wx, double wy, double wz) {
+                return it.T_rot(relorbit::Vec3(wx, wy, wz));
+            },
             py::arg("wx"), py::arg("wy"), py::arg("wz"))
         .def("mul",
-            [](const relorbit::InertiaTensor& it, double vx, double vy, double vz){
-                return it.mul(vx, vy, vz);
+            [](const relorbit::InertiaTensor& it, double vx, double vy, double vz) {
+                relorbit::Vec3 r = it.mul(relorbit::Vec3(vx, vy, vz));
+                return std::array<double,3>{r[0], r[1], r[2]};
             },
             py::arg("vx"), py::arg("vy"), py::arg("vz"));
 
     // ── AttitudeState ─────────────────────────────────────────
+    // q e w são Eigen::Vector4d / Vector3d internamente;
+    // def_property expõe os acessores escalares ao Python.
     py::class_<relorbit::AttitudeState>(m, "AttitudeState")
         .def(py::init<>())
-        .def_readwrite("q0", &relorbit::AttitudeState::q0)
-        .def_readwrite("q1", &relorbit::AttitudeState::q1)
-        .def_readwrite("q2", &relorbit::AttitudeState::q2)
-        .def_readwrite("q3", &relorbit::AttitudeState::q3)
-        .def_readwrite("wx", &relorbit::AttitudeState::wx)
-        .def_readwrite("wy", &relorbit::AttitudeState::wy)
-        .def_readwrite("wz", &relorbit::AttitudeState::wz)
-        .def("qnorm",        &relorbit::AttitudeState::qnorm)
-        .def("renormalize",  &relorbit::AttitudeState::renormalize);
+        .def_property("q0", &relorbit::AttitudeState::q0, &relorbit::AttitudeState::set_q0)
+        .def_property("q1", &relorbit::AttitudeState::q1, &relorbit::AttitudeState::set_q1)
+        .def_property("q2", &relorbit::AttitudeState::q2, &relorbit::AttitudeState::set_q2)
+        .def_property("q3", &relorbit::AttitudeState::q3, &relorbit::AttitudeState::set_q3)
+        .def_property("wx", &relorbit::AttitudeState::wx, &relorbit::AttitudeState::set_wx)
+        .def_property("wy", &relorbit::AttitudeState::wy, &relorbit::AttitudeState::set_wy)
+        .def_property("wz", &relorbit::AttitudeState::wz, &relorbit::AttitudeState::set_wz)
+        .def("qnorm",       &relorbit::AttitudeState::qnorm)
+        .def("renormalize", &relorbit::AttitudeState::renormalize);
 
     // ── TrajectoryAttitude ────────────────────────────────────
     py::class_<relorbit::TrajectoryAttitude>(m, "TrajectoryAttitude")
@@ -314,11 +336,14 @@ PYBIND11_MODULE(_engine, m) {
     // ── dcm_from_quaternion ───────────────────────────────────
     m.def("dcm_from_quaternion",
         [](double q0, double q1, double q2, double q3) {
-            auto R = relorbit::dcm_from_quaternion(q0, q1, q2, q3);
-            return std::vector<double>(R.begin(), R.end());
+            relorbit::Mat3 R = relorbit::dcm_from_quaternion(q0, q1, q2, q3);
+            // Devolve lista de 9 floats row-major
+            std::vector<double> v(9);
+            Eigen::Map<Eigen::Matrix<double,3,3,Eigen::RowMajor>>(v.data()) = R;
+            return v;
         },
         py::arg("q0"), py::arg("q1"), py::arg("q2"), py::arg("q3"),
-        "DCM R ∈ SO(3) body→inercial a partir do quaternion. "
+        "DCM R in SO(3) body->inercial a partir do quaternion. "
         "Devolve lista de 9 floats row-major.");
 
     // ── simulate_attitude_rk4 ─────────────────────────────────
@@ -330,7 +355,7 @@ PYBIND11_MODULE(_engine, m) {
         py::arg("t0"),
         py::arg("tf"),
         py::arg("cfg"),
-        "Integra dinâmica de atitude 6-DOF (q + ω) com RK4 de passo fixo. "
-        "Critérios: ‖q‖=1 (renormalização controlada) e T_rot conservada sem torque.");
+        "Integra dinamica de atitude 6-DOF (q + w) com RK4 de passo fixo. "
+        "Criterios: ||q||=1 (renormalizacao controlada) e T_rot conservada sem torque.");
 
 } // PYBIND11_MODULE

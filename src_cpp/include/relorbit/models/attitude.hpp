@@ -3,214 +3,196 @@
 // Módulo C — Item 7: Dinâmica de Atitude 6-DOF com Quaternions
 //
 // ═══════════════════════════════════════════════════════════════
-// ESTADO: y = (q0, q1, q2, q3, ωx, ωy, ωz)   dim = 7
+// ESTADO: y ∈ ℝ⁷ = (q0, q1, q2, q3, ωx, ωy, ωz)
 //
-//  q = [q0, qv]  quaternion unitário  (q0: escalar, qv: vetor)
-//  ω = [ωx, ωy, ωz]  velocidade angular no body frame  [rad/s]
+//  q = [q0, qv]  quaternion unitário  (q0: escalar, qv: vector)
+//  ω  velocidade angular no body frame  [rad/s]
 //
-// ── CINEMÁTICA (equação do quaternion) ──────────────────────────
+// ── CINEMÁTICA ───────────────────────────────────────────────────
 //
 //  q̇ = ½ Ω(ω) q
 //
-//  Ω(ω) =  ⎡  0  -ωx -ωy -ωz ⎤
-//           ⎢ ωx   0   ωz -ωy ⎥
-//           ⎢ ωy  -ωz   0   ωx⎥
-//           ⎣ ωz   ωy -ωx   0 ⎦
+//  Ω(ω) =  |  0  -wx -wy -wz |
+//           | wx   0   wz -wy |
+//           | wy  -wz   0   wx|
+//           | wz   wy -wx   0 |
 //
-//  Convenção: q leva vetores do body frame para o inercial.
+//  Convenção: q leva vectores do body frame para o inercial.
 //
-// ── DINÂMICA (Euler do corpo rígido, body frame) ─────────────────
+// ── DINÂMICA (Euler, body frame) ─────────────────────────────────
 //
-//  I ω̇ + ω × (I ω) = τ
-//  => ω̇ = I⁻¹ [ τ − ω × (I ω) ]
+//  I w' + w x (I w) = tau
+//  =>  w' = I^{-1} [ tau - w x (I w) ]
 //
-//  I: tensor de inércia 3×3, constante no body frame.
-//  τ: torque externo no body frame [N·m (SI) ou adimensional].
+//  I  : Eigen::Matrix3d simétrico positivo-definido (constante, body frame)
+//  tau: torque externo [N·m]
 //
 // ── CRITÉRIOS DE VALIDAÇÃO ───────────────────────────────────────
 //
-//  (a) Norma do quaternion: ‖q‖ = 1
-//      Renormalização controlada a cada passo (ou quando ‖q‖−1 > ε).
-//
-//  (b) Energia cinética rotacional (sem torque):
-//      T_rot = ½ ωᵀ I ω  = constante quando τ = 0.
+//  (a)  ||q|| = 1        via renormalização controlada
+//  (b)  T_rot constante  T = 1/2 w^T I w  quando tau = 0
 //
 // ═══════════════════════════════════════════════════════════════
 
 #pragma once
-#include <array>
+
+#include <Eigen/Dense>
+
 #include <cmath>
 #include <string>
 #include <vector>
 
 namespace relorbit {
 
-// ───────────────────────────────────────────────────────────────
-// AttitudeCfg — parâmetros de integração e renormalização
-// ───────────────────────────────────────────────────────────────
+// ── Aliases ──────────────────────────────────────────────────────
+using Vec3   = Eigen::Vector3d;
+using Vec4   = Eigen::Vector4d;
+using Mat3   = Eigen::Matrix3d;
+using State7 = Eigen::Matrix<double, 7, 1>;   // [q0 q1 q2 q3 wx wy wz]
+
+
+// ── AttitudeCfg ──────────────────────────────────────────────────
 struct AttitudeCfg {
-    double dt           = 0.01;   // passo de integração [s ou adim.]
-    int    n_steps      = 0;      // 0 => calculado a partir de (tf−t0)/dt
-    int    record_every = 1;      // gravar a cada N passos
-
-    // Renormalização do quaternion:
-    //   renorm_every > 0  => forçar a cada N passos
-    //   renorm_tol   > 0  => forçar quando | ‖q‖ − 1 | > tol
-    // Ambos podem estar activos simultaneamente.
-    int    renorm_every = 1;      // renormalizar em todo passo (default seguro)
-    double renorm_tol   = 1e-9;   // tolerância alternativa
+    double dt           = 0.01;
+    int    n_steps      = 0;        // 0 => calculado internamente
+    int    record_every = 1;
+    int    renorm_every = 1;
+    double renorm_tol   = 1e-9;
 };
 
-// ───────────────────────────────────────────────────────────────
-// TorqueCfg — torque externo simples (constante por janela de tempo)
-// ───────────────────────────────────────────────────────────────
+
+// ── TorqueCfg ────────────────────────────────────────────────────
 struct TorqueCfg {
-    double tx     = 0.0;    // componente x do torque no body frame
-    double ty     = 0.0;    // componente y
-    double tz     = 0.0;    // componente z
-    double t_on   = 0.0;    // início da aplicação
-    double t_off  = 1e18;   // fim da aplicação
+    Vec3   tau   = Vec3::Zero();
+    double t_on  = 0.0;
+    double t_off = 1e18;
 
-    bool   active(double t) const { return t >= t_on && t <= t_off; }
-    double get_x (double t) const { return active(t) ? tx : 0.0; }
-    double get_y (double t) const { return active(t) ? ty : 0.0; }
-    double get_z (double t) const { return active(t) ? tz : 0.0; }
+    bool active(double t)  const { return t >= t_on && t <= t_off; }
+    Vec3 get(double t)     const { return active(t) ? tau : Vec3::Zero(); }
+
+    // Acessores escalares (compatibilidade pybind / YAML)
+    double get_x(double t) const { return active(t) ? tau.x() : 0.0; }
+    double get_y(double t) const { return active(t) ? tau.y() : 0.0; }
+    double get_z(double t) const { return active(t) ? tau.z() : 0.0; }
+
+    double tx() const { return tau.x(); }
+    double ty() const { return tau.y(); }
+    double tz() const { return tau.z(); }
+    void set_tx(double v) { tau.x() = v; }
+    void set_ty(double v) { tau.y() = v; }
+    void set_tz(double v) { tau.z() = v; }
 };
 
-// ───────────────────────────────────────────────────────────────
-// AttitudeState — estado completo num instante
-// ───────────────────────────────────────────────────────────────
-struct AttitudeState {
-    double q0, q1, q2, q3;   // quaternion  (escalar + vetor)
-    double wx, wy, wz;        // velocidade angular no body frame
 
-    // Normaliza o quaternion in-place; devolve a norma anterior.
+// ── AttitudeState ────────────────────────────────────────────────
+struct AttitudeState {
+    Vec4 q = Vec4(1.0, 0.0, 0.0, 0.0);   // [q0, q1, q2, q3]
+    Vec3 w = Vec3::Zero();                 // velocidade angular
+
+    // Acessores escalares (compatibilidade pybind / YAML)
+    double q0() const { return q[0]; }  void set_q0(double v) { q[0] = v; }
+    double q1() const { return q[1]; }  void set_q1(double v) { q[1] = v; }
+    double q2() const { return q[2]; }  void set_q2(double v) { q[2] = v; }
+    double q3() const { return q[3]; }  void set_q3(double v) { q[3] = v; }
+    double wx() const { return w[0]; }  void set_wx(double v) { w[0] = v; }
+    double wy() const { return w[1]; }  void set_wy(double v) { w[1] = v; }
+    double wz() const { return w[2]; }  void set_wz(double v) { w[2] = v; }
+
     double renormalize() {
-        const double n = std::sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);
-        if (n > 0.0) { q0 /= n; q1 /= n; q2 /= n; q3 /= n; }
+        const double n = q.norm();
+        if (n > 0.0) q /= n;
         return n;
     }
-
-    double qnorm() const {
-        return std::sqrt(q0*q0 + q1*q1 + q2*q2 + q3*q3);
-    }
+    double qnorm() const { return q.norm(); }
 };
 
-// ───────────────────────────────────────────────────────────────
-// TrajectoryAttitude — resultado da integração
-// ───────────────────────────────────────────────────────────────
+
+// ── TrajectoryAttitude ───────────────────────────────────────────
 struct TrajectoryAttitude {
-    // Séries temporais
-    std::vector<double> t;             // tempo
-    std::vector<double> q0, q1, q2, q3;   // quaternion
-    std::vector<double> wx, wy, wz;    // velocidade angular
-    std::vector<double> qnorm;         // ‖q‖  (deve ser ≈ 1)
-    std::vector<double> T_rot;         // energia cinética rotacional ½ ωᵀ I ω
-    std::vector<double> renorm_delta;  // | ‖q‖ − 1 | antes de renormalizar
+    std::vector<double> t;
+    std::vector<double> q0, q1, q2, q3;
+    std::vector<double> wx, wy, wz;
+    std::vector<double> qnorm;
+    std::vector<double> T_rot;
+    std::vector<double> renorm_delta;
 
-    // Parâmetros guardados
-    double Ixx = 1.0, Iyy = 1.0, Izz = 1.0;  // momentos principais de inércia
-    double Ixy = 0.0, Ixz = 0.0, Iyz = 0.0;  // termos fora da diagonal
+    double Ixx = 1.0, Iyy = 1.0, Izz = 1.0;
+    double Ixy = 0.0, Ixz = 0.0, Iyz = 0.0;
 
-    std::string status;   // "OK" | "ERROR"
+    std::string status;
     std::string message;
 };
 
-// ───────────────────────────────────────────────────────────────
-// InertiaTensor — wrapper para o tensor 3×3 simétrico no body frame
-// ───────────────────────────────────────────────────────────────
-//  Convenção de armazenamento (row-major, 0-indexed):
-//    I[0]=Ixx  I[1]=Ixy  I[2]=Ixz
-//    I[3]=Ixy  I[4]=Iyy  I[5]=Iyz
-//    I[6]=Ixz  I[7]=Iyz  I[8]=Izz
-// ───────────────────────────────────────────────────────────────
-struct InertiaTensor {
-    std::array<double, 9> I = {1.0, 0.0, 0.0,
-                                0.0, 1.0, 0.0,
-                                0.0, 0.0, 1.0};
 
-    // Constrói tensor diagonal (corpo com eixos principais alinhados ao body)
+// ── InertiaTensor ────────────────────────────────────────────────
+//
+// Wrapper sobre Eigen::Matrix3d.
+// A inversa usa Cholesky (LLT) para tensores SPD,
+// com fallback para FullPivLU em casos degenerados.
+struct InertiaTensor {
+    Mat3 I = Mat3::Identity();
+
     static InertiaTensor diagonal(double Ixx, double Iyy, double Izz) {
         InertiaTensor it;
-        it.I = {Ixx,  0.0,  0.0,
-                0.0,  Iyy,  0.0,
-                0.0,  0.0,  Izz};
+        it.I = Mat3::Zero();
+        it.I(0,0) = Ixx;
+        it.I(1,1) = Iyy;
+        it.I(2,2) = Izz;
         return it;
     }
 
-    // Constrói tensor completo simétrico
     static InertiaTensor full(double Ixx, double Iyy, double Izz,
                                double Ixy, double Ixz, double Iyz) {
         InertiaTensor it;
-        it.I = {Ixx, Ixy, Ixz,
+        it.I << Ixx, Ixy, Ixz,
                 Ixy, Iyy, Iyz,
-                Ixz, Iyz, Izz};
+                Ixz, Iyz, Izz;
         return it;
     }
 
-    // Produto  v_out = I * v
-    std::array<double,3> mul(double vx, double vy, double vz) const {
-        return { I[0]*vx + I[1]*vy + I[2]*vz,
-                 I[3]*vx + I[4]*vy + I[5]*vz,
-                 I[6]*vx + I[7]*vy + I[8]*vz };
-    }
+    // I w  (produto matriz-vector — Eigen vectorizado)
+    Vec3 mul(const Vec3& w) const { return I * w; }
 
-    // Energia cinética rotacional  T = ½ ωᵀ I ω
-    double T_rot(double wx, double wy, double wz) const {
-        auto Iw = mul(wx, wy, wz);
-        return 0.5 * (wx*Iw[0] + wy*Iw[1] + wz*Iw[2]);
-    }
+    // T_rot = 1/2 w^T I w
+    double T_rot(const Vec3& w) const { return 0.5 * w.dot(I * w); }
 
-    // Inversa analítica do tensor 3×3 simétrico.
-    // Devolve false se o determinante for degenerado (|det| < tol).
-    bool invert(std::array<double,9>& Iinv, double tol = 1e-18) const {
-        // cofactores
-        const double c00 = I[4]*I[8] - I[5]*I[7];
-        const double c01 = I[5]*I[6] - I[3]*I[8];
-        const double c02 = I[3]*I[7] - I[4]*I[6];
-        const double det = I[0]*c00 + I[1]*c01 + I[2]*c02;
-        if (std::abs(det) < tol) return false;
-        const double inv_det = 1.0 / det;
-        Iinv[0] = c00 * inv_det;
-        Iinv[1] = (I[2]*I[7] - I[1]*I[8]) * inv_det;
-        Iinv[2] = (I[1]*I[5] - I[2]*I[4]) * inv_det;
-        Iinv[3] = c01 * inv_det;
-        Iinv[4] = (I[0]*I[8] - I[2]*I[6]) * inv_det;
-        Iinv[5] = (I[2]*I[3] - I[0]*I[5]) * inv_det;
-        Iinv[6] = c02 * inv_det;
-        Iinv[7] = (I[1]*I[6] - I[0]*I[7]) * inv_det;
-        Iinv[8] = (I[0]*I[4] - I[1]*I[3]) * inv_det;
+    // Inversa: Cholesky (SPD) ou LU (fallback)
+    bool invert(Mat3& Iinv) const {
+        Eigen::LLT<Mat3> llt(I);
+        if (llt.info() == Eigen::Success) {
+            Iinv = llt.solve(Mat3::Identity());
+            return true;
+        }
+        Eigen::FullPivLU<Mat3> lu(I);
+        if (!lu.isInvertible()) return false;
+        Iinv = lu.inverse();
         return true;
     }
+
+    // Acesso por índice (compatibilidade pybind)
+    double coeff(int i, int j) const { return I(i, j); }
 };
 
-// ───────────────────────────────────────────────────────────────
-// DCM a partir do quaternion (body → inercial)
+
+// ── DCM a partir do quaternion (body → inercial) ─────────────────
 //
-//   R(q) = (q0²−‖qv‖²) I₃  +  2 qv qvᵀ  +  2 q0 [qv]×
-//
-//   Devolve array row-major 9 elementos.
-// ───────────────────────────────────────────────────────────────
-inline std::array<double, 9> dcm_from_quaternion(
-    double q0, double q1, double q2, double q3)
-{
-    const double s  = q0*q0 - q1*q1 - q2*q2 - q3*q3;
-    std::array<double,9> R;
-    R[0] = s + 2.0*q1*q1;     R[1] = 2.0*(q1*q2 - q0*q3); R[2] = 2.0*(q1*q3 + q0*q2);
-    R[3] = 2.0*(q1*q2 + q0*q3); R[4] = s + 2.0*q2*q2;     R[5] = 2.0*(q2*q3 - q0*q1);
-    R[6] = 2.0*(q1*q3 - q0*q2); R[7] = 2.0*(q2*q3 + q0*q1); R[8] = s + 2.0*q3*q3;
-    return R;
+// Delega para Eigen::Quaterniond::toRotationMatrix().
+inline Mat3 dcm_from_quaternion(double q0, double q1, double q2, double q3) {
+    return Eigen::Quaterniond(q0, q1, q2, q3).normalized().toRotationMatrix();
 }
 
-// ───────────────────────────────────────────────────────────────
-// Função principal de integração
-// ───────────────────────────────────────────────────────────────
+inline Mat3 dcm_from_quaternion(const Vec4& q) {
+    return dcm_from_quaternion(q[0], q[1], q[2], q[3]);
+}
+
+
+// ── Função principal de integração ──────────────────────────────
 TrajectoryAttitude simulate_attitude_rk4(
-    const AttitudeState&  state0,     // estado inicial (q, ω)
-    const InertiaTensor&  inertia,    // tensor de inércia no body frame
-    const TorqueCfg&      torque,     // torque externo
-    double t0, double tf,             // intervalo de tempo
-    const AttitudeCfg&    cfg         // configuração do integrador
+    const AttitudeState&  state0,
+    const InertiaTensor&  inertia,
+    const TorqueCfg&      torque,
+    double t0, double tf,
+    const AttitudeCfg&    cfg
 );
 
 } // namespace relorbit
