@@ -83,12 +83,17 @@ A simulação abandona o determinismo de corpo único para incorporar uma análi
 
 ## 4. Como Rodar
 
-### 4.1 Instalação
-O pacote Python chama o sistema de build para compilar as bibliotecas nativas via `scikit-build-core`:
-```bash
-python -m pip install -e .
+### 4.1 Dependências C++ (Eigen)
+O motor nativo utiliza a biblioteca **Eigen** para otimização de álgebra linear. Como a Eigen é uma biblioteca *header-only*, basta fazer o download do código-fonte para o diretório `third_party` do projeto antes de compilar.
 
-```
+Você pode clonar o repositório oficial diretamente via Git:
+
+```bash
+# Crie a pasta third_party caso ela não exista
+mkdir -p third_party
+
+# Clone o repositório da Eigen
+git clone [https://gitlab.com/libeigen/eigen.git](https://gitlab.com/libeigen/eigen.git) third_party/eigen
 
 ### 4.2 Executar Missões (Mission Runner)
 
@@ -96,6 +101,17 @@ Processa planos de voo definidos em configuração YAML, acoplando a dinâmica o
 
 ```bash
 python -m relorbit_py.run_mission --config src/relorbit_py/mission.yaml
+
+```
+
+*(Certifique-se de que a estrutura fique de modo que o CMake consiga encontrar os headers em `third_party/eigen/Eigen`)*
+
+### 4.2 Instalação do Projeto
+
+Com a dependência no lugar, o pacote Python chamará o sistema de build para compilar as bibliotecas nativas via `scikit-build-core`:
+
+```bash
+python -m pip install -e .
 
 ```
 
