@@ -38,12 +38,14 @@ pybind11_add_module(_engine
   src_cpp/lib/schwarzschild_lowthrust.cpp
   src_cpp/lib/kerr_lowthrust.cpp
   src_cpp/lib/attitude.cpp
+  src_cpp/lib/schwarzschild_6dof.cpp
   src_cpp/include/relorbit/types.hpp
   src_cpp/include/relorbit/api.hpp
   src_cpp/include/relorbit/models/schwarzschild_equatorial.hpp
   src_cpp/include/relorbit/models/schwarzschild_lowthrust.hpp
   src_cpp/include/relorbit/models/kerr_lowthrust.hpp
   src_cpp/include/relorbit/models/attitude.hpp
+  src_cpp/include/relorbit/models/schwarzschild_6dof.hpp
 )
 
 target_include_directories(_engine PRIVATE

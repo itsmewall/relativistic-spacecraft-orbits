@@ -33,6 +33,10 @@ from relorbit_py.plots_visibility_redshift import (
     plot_visibility_map,
     plot_redshift_asymptotic,
 )
+from relorbit_py.simulate_6dof import (
+    run_6dof_mission,
+    validate_6dof,
+)
 from relorbit_py.attitude_mission import (
     from_yaml_dict       as attitude_cfg_from_yaml,
     run_attitude_mission,
@@ -102,6 +106,69 @@ def _run_attitude_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
         return False
 
 
+# ── 6-DOF Thrust Vectoring ────────────────────────────────────
+
+def _plot_6dof(result: Any, outdir: str) -> List[str]:
+    traj = result.traj
+    if traj is None or not traj.tau:
+        return []
+    os.makedirs(outdir, exist_ok=True)
+    tau = list(traj.tau)
+    paths: List[str] = []
+
+    fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+    fig.suptitle(f"{result.name} - Orbita + Massa", fontsize=12)
+    ax0.plot(tau, traj.r, linewidth=1.4)
+    ax0.set_ylabel("r [M]"); ax0.grid(True, alpha=0.3)
+    ax1.plot(tau, traj.mass, color="darkorange", linewidth=1.4)
+    ax1.set_ylabel("massa [kg]"); ax1.set_xlabel("tau"); ax1.grid(True, alpha=0.3)
+    fig.tight_layout()
+    p = os.path.join(outdir, f"{result.name}_orbit_mass.png")
+    fig.savefig(p, dpi=130); plt.close(fig); paths.append(p)
+
+    fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+    fig.suptitle(f"{result.name} - Quaternion", fontsize=12)
+    for comp, lbl in zip([traj.q0, traj.q1, traj.q2, traj.q3], ["q0","q1","q2","q3"]):
+        ax0.plot(tau, comp, label=lbl)
+    ax0.set_ylabel("componentes"); ax0.legend(fontsize=8); ax0.grid(True, alpha=0.3)
+    ax1.plot(tau, [n - 1.0 for n in traj.qnorm], color="red", linewidth=0.8)
+    ax1.axhline(0.0, color="black", linewidth=0.5, linestyle="--")
+    ax1.set_ylabel("||q|| - 1"); ax1.set_xlabel("tau"); ax1.grid(True, alpha=0.3)
+    fig.tight_layout()
+    p = os.path.join(outdir, f"{result.name}_quaternion.png")
+    fig.savefig(p, dpi=130); plt.close(fig); paths.append(p)
+
+    fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+    fig.suptitle(f"{result.name} - Thrust Vectoring", fontsize=12)
+    ax0.plot(tau, traj.thrust_r,   label="f_r [geom]",   linewidth=1.2)
+    ax0.plot(tau, traj.thrust_phi, label="f_phi [geom]", linewidth=1.2, linestyle="--")
+    ax0.set_ylabel("acel. geometrica"); ax0.legend(fontsize=8); ax0.grid(True, alpha=0.3)
+    ax1.plot(tau, list(traj.epsilon), color="purple", linewidth=0.8)
+    ax1.axhline(0.0, color="black", linewidth=0.5, linestyle="--")
+    ax1.set_ylabel("epsilon = pr2 + Veff - E2"); ax1.set_xlabel("tau"); ax1.grid(True, alpha=0.3)
+    fig.tight_layout()
+    p = os.path.join(outdir, f"{result.name}_thrust_epsilon.png")
+    fig.savefig(p, dpi=130); plt.close(fig); paths.append(p)
+
+    return paths
+
+
+def _run_6dof_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
+    name = m_cfg.get("name", "<sem-nome>")
+    try:
+        result = run_6dof_mission(m_cfg)
+        report = validate_6dof(result)
+        print(f"   Status : {report['status']}")
+        for note in report["notes"]:
+            print(f"   {note}")
+        for p in _plot_6dof(result, outdir):
+            print(f"   Plot: {p}")
+        return report["status"] == "PASS"
+    except Exception as ex:
+        print(f"   [ERRO] Falha na missao 6-DOF {name}: {ex}")
+        return False
+
+
 # ── Runner principal ──────────────────────────────────────────
 
 def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
@@ -114,6 +181,11 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
         name  = m_cfg.get("name",  "<sem-nome>")
         model = m_cfg.get("model", "schwarzschild_equatorial")
         print(f"\n{'='*60}\n==> Missao: {name}  [{model}]\n{'='*60}")
+
+        if model == "schwarzschild_6dof":
+            if not _run_6dof_mission(m_cfg, outdir):
+                all_ok = False
+            continue
 
         if model == "attitude":
             if not _run_attitude_mission(m_cfg, outdir):

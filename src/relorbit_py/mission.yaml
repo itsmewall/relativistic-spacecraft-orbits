@@ -214,3 +214,111 @@ missions:
       record_every: 10
       renorm_every: 1
       renorm_tol: 1.0e-9
+
+  # ============================================================
+  # MISSÃO 8a: Thrust Vectoring — Rotação Lenta (spin-stabilized)
+  #
+  # Objetivo: Validar acoplamento 6-DOF.
+  #   - Nave em órbita elíptica em r=10M com spin ωz=0.05 rad/s
+  #   - Motor a 50 N alinhado com bocal +z (eixo de spin)
+  #   - Como a nave gira devagar, o empuxo precessa no plano equatorial
+  #   - Resultado esperado: espiral de saída suave, variação de E e L
+  #   - Critérios: ||q||=1, ε≈0 fora dos pulsos, massa decresce
+  # ============================================================
+  - name: "ThrustVectoring_SpinStabilized"
+    description: >
+      Nave em spin lento (wz=0.05 rad/s) com motor alinhado ao eixo de spin.
+      O empuxo precessa no plano equatorial acoplado com a atitude.
+      Valida acoplamento R(q)*k_body -> forca orbital.
+    model: "schwarzschild_6dof"
+    params:
+      M: 1.0
+      E: 0.9500
+      L: 3.800
+      capture_r: 2.1
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 1.0
+      q1: 0.0
+      q2: 0.0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.05         # spin lento em z (rad/s)
+    inertia:
+      Ixx: 500.0       # kg·m²
+      Iyy: 500.0
+      Izz: 200.0       # eixo de spin mais leve
+    engine:
+      F_newton:    50.0         # [N]
+      isp_s:       3000.0
+      mass0_kg:    1000.0
+      dry_mass_kg:  300.0
+      nozzle_body: [0.0, 0.0, 1.0]   # bocal = eixo z do body
+      tau_on:      0.0
+      tau_off:     400.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    span: [0.0, 500.0]
+    solver:
+      dt:           0.005
+      record_every: 20
+      renorm_every: 1
+      renorm_tol:   1.0e-9
+
+  # ============================================================
+  # MISSÃO 8b: Thrust Vectoring — Misalignment Crítico
+  #
+  # Objetivo: Demonstrar degradação quando o bocal não está alinhado.
+  #   - Bocal rodado 30° em torno de x → componente de empuxo sai do
+  #     plano equatorial (descartada no modelo 2D) → Δv efectivo < nominal
+  #   - Nave começa sem spin para isolar o efeito do misalignment
+  #   - Comparar com 8a: mesmo motor, menos Δv efectivo
+  # ============================================================
+  - name: "ThrustVectoring_Misalignment30deg"
+    description: >
+      Bocal rodado 30 graus em torno de x no body frame.
+      Demonstra reducao de eficiencia: componente out-of-plane e descartada.
+      Comparar massa consumida com ThrustVectoring_SpinStabilized.
+    model: "schwarzschild_6dof"
+    params:
+      M: 1.0
+      E: 0.9500
+      L: 3.800
+      capture_r: 2.1
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 1.0
+      q1: 0.0
+      q2: 0.0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.0           # sem spin inicial — misalignment puro
+    inertia:
+      Ixx: 500.0
+      Iyy: 500.0
+      Izz: 200.0
+    engine:
+      F_newton:    50.0
+      isp_s:       3000.0
+      mass0_kg:    1000.0
+      dry_mass_kg:  300.0
+      # bocal a 30 graus de z para y: [0, sin30, cos30] = [0, 0.5, 0.866]
+      nozzle_body: [0.0, 0.5, 0.866]
+      tau_on:      0.0
+      tau_off:     400.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    span: [0.0, 500.0]
+    solver:
+      dt:           0.005
+      record_every: 20
+      renorm_every: 1
+      renorm_tol:   1.0e-9

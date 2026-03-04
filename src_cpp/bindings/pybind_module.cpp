@@ -12,6 +12,7 @@
 #include "relorbit/models/schwarzschild_lowthrust.hpp"
 #include "relorbit/models/kerr_lowthrust.hpp"
 #include "relorbit/models/attitude.hpp"
+#include "relorbit/models/schwarzschild_6dof.hpp"
 
 namespace py = pybind11;
 
@@ -357,5 +358,110 @@ PYBIND11_MODULE(_engine, m) {
         py::arg("cfg"),
         "Integra dinamica de atitude 6-DOF (q + w) com RK4 de passo fixo. "
         "Criterios: ||q||=1 (renormalizacao controlada) e T_rot conservada sem torque.");
+
+
+
+    // ══════════════════════════════════════════════════════════════
+    // Item 8 — Thrust Vectoring 6-DOF (Schwarzschild acoplado)
+    // ══════════════════════════════════════════════════════════════
+
+    // ── EngineCfg ─────────────────────────────────────────────────
+    py::class_<relorbit::EngineCfg>(m, "EngineCfg")
+        .def(py::init<>())
+        .def_readwrite("F_newton",        &relorbit::EngineCfg::F_newton)
+        .def_readwrite("isp_s",           &relorbit::EngineCfg::isp_s)
+        .def_readwrite("tau_on",          &relorbit::EngineCfg::tau_on)
+        .def_readwrite("tau_off",         &relorbit::EngineCfg::tau_off)
+        .def_readwrite("mass0_kg",        &relorbit::EngineCfg::mass0_kg)
+        .def_readwrite("dry_mass_kg",     &relorbit::EngineCfg::dry_mass_kg)
+        .def_property("nozzle_body",
+            [](const relorbit::EngineCfg& e) {
+                return std::array<double,3>{e.nozzle_body[0], e.nozzle_body[1], e.nozzle_body[2]};
+            },
+            [](relorbit::EngineCfg& e, const std::array<double,3>& v) {
+                e.nozzle_body = relorbit::Vec3(v[0], v[1], v[2]);
+            })
+        .def_property("torque_reaction",
+            [](const relorbit::EngineCfg& e) {
+                return std::array<double,3>{e.torque_reaction[0], e.torque_reaction[1], e.torque_reaction[2]};
+            },
+            [](relorbit::EngineCfg& e, const std::array<double,3>& v) {
+                e.torque_reaction = relorbit::Vec3(v[0], v[1], v[2]);
+            })
+        .def("active",  &relorbit::EngineCfg::active,  py::arg("tau"))
+        .def("F_geom",  &relorbit::EngineCfg::F_geom,  py::arg("m_kg"));
+
+    // ── AttitudeCfg6DOF ───────────────────────────────────────────
+    py::class_<relorbit::AttitudeCfg6DOF>(m, "AttitudeCfg6DOF")
+        .def(py::init<>())
+        .def_readwrite("inertia",       &relorbit::AttitudeCfg6DOF::inertia)
+        .def_readwrite("ext_torque",    &relorbit::AttitudeCfg6DOF::ext_torque)
+        .def_readwrite("renorm_every",  &relorbit::AttitudeCfg6DOF::renorm_every)
+        .def_readwrite("renorm_tol",    &relorbit::AttitudeCfg6DOF::renorm_tol);
+
+    // ── SolverCfg6DOF ─────────────────────────────────────────────
+    py::class_<relorbit::SolverCfg6DOF>(m, "SolverCfg6DOF")
+        .def(py::init<>())
+        .def_readwrite("dt",            &relorbit::SolverCfg6DOF::dt)
+        .def_readwrite("n_steps",       &relorbit::SolverCfg6DOF::n_steps)
+        .def_readwrite("record_every",  &relorbit::SolverCfg6DOF::record_every)
+        .def_readwrite("renorm_every",  &relorbit::SolverCfg6DOF::renorm_every)
+        .def_readwrite("renorm_tol",    &relorbit::SolverCfg6DOF::renorm_tol)
+        .def_readwrite("capture_r",     &relorbit::SolverCfg6DOF::capture_r)
+        .def_readwrite("capture_eps",   &relorbit::SolverCfg6DOF::capture_eps);
+
+    // ── TrajectoryCoupled ─────────────────────────────────────────
+    py::class_<relorbit::TrajectoryCoupled>(m, "TrajectoryCoupled")
+        // Órbita
+        .def_readonly("tau",          &relorbit::TrajectoryCoupled::tau)
+        .def_readonly("r",            &relorbit::TrajectoryCoupled::r)
+        .def_readonly("phi",          &relorbit::TrajectoryCoupled::phi)
+        .def_readonly("pr",           &relorbit::TrajectoryCoupled::pr)
+        .def_readonly("E",            &relorbit::TrajectoryCoupled::E)
+        .def_readonly("L",            &relorbit::TrajectoryCoupled::L)
+        .def_readonly("mass",         &relorbit::TrajectoryCoupled::mass)
+        .def_readonly("epsilon",      &relorbit::TrajectoryCoupled::epsilon)
+        .def_readonly("tcoord",       &relorbit::TrajectoryCoupled::tcoord)
+        // Atitude
+        .def_readonly("q0",           &relorbit::TrajectoryCoupled::q0)
+        .def_readonly("q1",           &relorbit::TrajectoryCoupled::q1)
+        .def_readonly("q2",           &relorbit::TrajectoryCoupled::q2)
+        .def_readonly("q3",           &relorbit::TrajectoryCoupled::q3)
+        .def_readonly("wx",           &relorbit::TrajectoryCoupled::wx)
+        .def_readonly("wy",           &relorbit::TrajectoryCoupled::wy)
+        .def_readonly("wz",           &relorbit::TrajectoryCoupled::wz)
+        .def_readonly("qnorm",        &relorbit::TrajectoryCoupled::qnorm)
+        .def_readonly("T_rot",        &relorbit::TrajectoryCoupled::T_rot)
+        // Thrust
+        .def_readonly("thrust_r",     &relorbit::TrajectoryCoupled::thrust_r)
+        .def_readonly("thrust_phi",   &relorbit::TrajectoryCoupled::thrust_phi)
+        .def_readonly("pointing_err", &relorbit::TrajectoryCoupled::pointing_err)
+        // Meta
+        .def_readonly("M",            &relorbit::TrajectoryCoupled::M)
+        .def_readonly("status",       [](const relorbit::TrajectoryCoupled& t) {
+            switch (t.status) {
+                case relorbit::OrbitStatus::BOUND:   return std::string("BOUND");
+                case relorbit::OrbitStatus::UNBOUND: return std::string("UNBOUND");
+                case relorbit::OrbitStatus::CAPTURE: return std::string("CAPTURE");
+                default:                             return std::string("ERROR");
+            }
+        })
+        .def_readonly("message",      &relorbit::TrajectoryCoupled::message);
+
+    // ── simulate_schwarzschild_6dof_rk4 ──────────────────────────
+    m.def("simulate_schwarzschild_6dof_rk4",
+        &relorbit::simulate_schwarzschild_6dof_rk4,
+        py::arg("M"),
+        py::arg("E0"), py::arg("L0"),
+        py::arg("r0"), py::arg("phi0"), py::arg("pr0"),
+        py::arg("att0"),
+        py::arg("tau0"), py::arg("tauf"),
+        py::arg("engine"),
+        py::arg("att_cfg"),
+        py::arg("cfg"),
+        "Integra orbita + atitude acopladas em Schwarzschild equatorial. "
+        "O empuxo e vectorizado pela orientacao actual do quaternion: "
+        "a_thrust = (F/m) * R(q) * nozzle_body.");
+
 
 } // PYBIND11_MODULE
