@@ -1,140 +1,161 @@
 # Relativistic Spacecraft Orbits — Simulação Numérica de Missão 6-DOF em Campos Extremos
 
-Este repositório implementa um **motor de simulação híbrido** (C++ + Python) para o estudo de missões espaciais de alta fidelidade física. O sistema evoluiu de um integrador de geodésicas para um simulador completo de **6 Graus de Liberdade (6-DOF)**, integrando dinâmica orbital e de atitude em espaços-tempos curvos (Schwarzschild e Kerr).
+Este repositório implementa um motor de simulação híbrido (C++ + Python) para o estudo de missões espaciais de alta fidelidade física. O sistema evoluiu de um integrador de geodésicas para um simulador completo de 6 Graus de Liberdade (6-DOF), integrando dinâmica orbital translacional e atitudinal em espaços-tempos curvos (Schwarzschild e Kerr).
 
-O projeto atua como o núcleo computacional para engenharia de missões próximas a objetos compactos, unindo a mecânica orbital clássica à relatividade geral, com análise de incertezas via Monte Carlo e suporte a empuxo vetorizado.
-
----
+O projeto atua como o núcleo computacional para a engenharia de missões próximas a objetos compactos, unindo a mecânica orbital clássica à relatividade geral. Inclui suporte a análise estocástica de incertezas via Monte Carlo e simulação de empuxo vetorizado sob efeitos severos de dilatação temporal e arraste de referencial.
 
 ## 1. Arquitetura e Tecnologia
 
 ### 1.1 Stack Técnica
-- **C++ (Core Engine)**: Utiliza a biblioteca **Eigen** para álgebra linear otimizada. Implementa integradores de passo fixo e adaptativo (RK4) para os estados orbitais e rotacionais.
-- **pybind11**: Bindings de baixa latência que expõem o motor C++ para o ecossistema Python.
-- **Python (Orquestração)**: Gerencia o `Mission Runner`, processa configurações via YAML, propaga estatísticas de Monte Carlo e gera a telemetria visual.
 
+C++ (Core Engine): Utiliza a biblioteca Eigen para álgebra linear otimizada, permitindo a vetorização de operações (SIMD). Implementa integradores de passo fixo e adaptativo (RK4) para os estados orbitais e rotacionais.
 
+pybind11: Bindings de baixa latência que expõem o motor C++ para o ecossistema Python sob a interface relorbit_py._engine.
 
----
+Python (Orquestração): Gerencia o pipeline de Mission Runner, processa configurações declarativas via YAML, executa simulações em lote (Batch) para Monte Carlo e gera a telemetria visual e relatórios (report.json).
 
 ## 2. Fundamentação Teórica e Modelos Físicos
 
-A separação de regimes físicos e sistemas de unidades é estrita. O modelo Newtoniano utiliza o SI ou unidades adimensionais clássicas, enquanto os modelos relativísticos adotam **unidades geométricas** ($G = c = 1$), nas quais massa ($M$), tempo ($t$) e distância ($r$) possuem a mesma dimensão fundamental.
+A simulação separa rigorosamente os regimes físicos. No escopo Newtoniano, adotam-se as grandezas usuais da astrodinâmica. Para as soluções exatas das equações de campo de Einstein, adotam-se unidades geométricas ($G = c = 1$), reduzindo massa ($M$), tempo ($t$) e distância ($r$) à mesma base dimensional.
 
-### 2.1 Mecânica Clássica e Dinâmica de Foguetes (2-Corpos)
-A base do movimento de uma espaçonave sob um campo gravitacional central é descrita pela equação fundamental da astrodinâmica:
+### 2.1 Astrodinâmica Clássica e Propulsão (Problema de 2-Corpos)
+
+A base do movimento de uma espaçonave sob um campo gravitacional central esférico é regida pela equação fundamental:
 
 $$\frac{d^2\mathbf{r}}{dt^2} = -\frac{\mu}{r^3}\mathbf{r}$$
 
-Onde $\mu = G(M_1 + M_2)$ é o parâmetro gravitacional padrão. As trajetórias são regidas pela conservação de energia e momento angular específicos:
+Onde $\mu = G(M_1 + m) \approx GM_1$ é o parâmetro gravitacional padrão. A trajetória preserva a energia orbital específica e o momento angular específico:
+
+
 $$\epsilon = \frac{v^2}{2} - \frac{\mu}{r} \quad \text{e} \quad \mathbf{h} = \mathbf{r} \times \mathbf{v}$$
 
-Para o deslocamento translacional ativo, aplica-se a equação do foguete de Tsiolkovsky:
-$$\Delta v = I_{sp} g_0 \ln\left(\frac{m_0}{m_f}\right)$$
-O empuxo é tratado como uma força perturbadora incorporada ao integrador numérico, permitindo a transição entre órbitas (e.g., Transferência de Hohmann).
+Para o deslocamento translacional ativo (manobras), a simulação acopla a equação fundamental de Tsiolkovsky, modelando a variação de massa discreta ou contínua do veículo:
 
-### 2.2 Relatividade Geral: Schwarzschild (Buracos Negros Estáticos)
-No entorno de uma massa esfericamente simétrica e não rotante, o espaço-tempo é descrito pela métrica de Schwarzschild. No plano equatorial ($\theta = \pi/2$), o elemento de linha é:
+
+$$\Delta v = I_{sp} g_0 \ln\left(\frac{m_0}{m_f}\right)$$
+
+### 2.2 Relatividade Geral: Schwarzschild e Geodésicas
+
+No entorno de uma massa $M$ esfericamente simétrica e estática, o espaço-tempo é descrito pela métrica de Schwarzschild. No plano equatorial ($\theta = \pi/2$), o elemento de linha invariante é dado por:
 
 $$ds^2 = -\left(1-\frac{2M}{r}\right) dt^2 + \left(1-\frac{2M}{r}\right)^{-1} dr^2 + r^2 d\phi^2$$
 
-A trajetória de uma sonda em queda livre é uma **geodésica temporal**, parametrizada pelo tempo próprio $\tau$, obedecendo à condição de normalização da quadri-velocidade $g_{\mu\nu}u^\mu u^\nu = -1$. Devido aos vetores de Killing, a energia e o momento angular relativísticos ($\mathcal{E}$ e $\mathcal{L}$) são conservados. A dinâmica radial reduz-se a um problema unidimensional num **potencial efetivo**:
+A trajetória livre de forças não gravitacionais é uma geodésica, que extremiza o tempo próprio $\tau$. Ela satisfaz a equação da geodésica com os símbolos de Christoffel $\Gamma^\mu_{\alpha\beta}$:
 
-$$\left(\frac{dr}{d\tau}\right)^2 + V_{\text{eff}}(r) = \mathcal{E}^2$$
-$$V_{\text{eff}}(r) = \left(1-\frac{2M}{r}\right)\left(1+\frac{\mathcal{L}^2}{r^2}\right)$$
+$$\frac{d^2 x^\mu}{d\tau^2} + \Gamma^\mu_{\alpha\beta} \frac{dx^\alpha}{d\tau} \frac{dx^\beta}{d\tau} = 0$$
 
+Em vez de integrar a equação de 2ª ordem diretamente, o motor explora as simetrias do espaço-tempo (vetores de Killing espaciais e temporais) que garantem a conservação da energia relativística $\mathcal{E}$ e do momento angular relativístico $\mathcal{L}$. Reduz-se a dinâmica a uma equação de 1ª ordem com um potencial efetivo $V_{\text{eff}}$:
 
+$$\left(\frac{dr}{d\tau}\right)^2 + V_{\text{eff}}(r) = \mathcal{E}^2, \quad \text{onde} \quad V_{\text{eff}}(r) = \left(1-\frac{2M}{r}\right)\left(1+\frac{\mathcal{L}^2}{r^2}\right)$$
 
-Este modelo prevê fenômenos inexistentes em Newton, como o avanço do periastro e a existência da **ISCO** (Innermost Stable Circular Orbit) em $r = 6M$.
+#### 2.2.1 Dilatação Temporal e Telemetria
 
-### 2.3 Relatividade Geral: Kerr (O Efeito Lense-Thirring)
-Quando o objeto central possui momento angular (spin $a = J/M$), a métrica de Kerr introduz o arraste do espaço-tempo (*Frame-Dragging*). Na região da **Ergossfera**, um observador é fisicamente incapaz de permanecer estático em relação ao infinito. A métrica possui termos cruzados $g_{t\phi} \neq 0$:
-
-$$ds^2 = g_{tt}dt^2 + 2g_{t\phi}dtd\phi + g_{rr}dr^2 + g_{\theta\theta}d\theta^2 + g_{\phi\phi}d\phi^2$$
-
-Isso gera torques geodésicos na sonda e exige um tratamento diferenciado do consumo de propelente: manobras progradas (a favor do spin) tornam-se drasticamente mais eficientes que retrógradas. A métrica de Kerr é vital para avaliar a sobrevivência de sondas inseridas em regimes de gravidade forte de buracos negros rotativos.
+O tempo coordenado $t$ (observador no infinito) diverge do tempo próprio $\tau$ da sonda. O motor resolve ativamente a razão:
 
 
+$$\frac{dt}{d\tau} = \mathcal{E} \left(1 - \frac{2M}{r}\right)^{-1}$$
 
-### 2.4 Dinâmica de Atitude 6-DOF com Quaternions
-Para evitar singularidades matemáticas (*Gimbal Lock*) presentes nos ângulos de Euler, a orientação da espaçonave é integrada utilizando **quaternions unitários** $q = q_0 + q_1i + q_2j + q_3k$.
 
-A cinemática atitudinal é governada por:
+Isso permite prever o exato instante em que pacotes de telemetria sofrerão atraso assintótico e o momento adequado de ignição autônoma dos motores antes do cruzamento do Horizonte de Eventos ($r = 2M$).
+
+### 2.3 Relatividade Geral: Kerr e o Efeito Lense-Thirring
+
+Quando a singularidade possui rotação (parâmetro de spin $a = J/M$), a simetria esférica é quebrada para uma simetria axial (métrica de Kerr). O elemento de linha em coordenadas de Boyer-Lindquist revela o termo cruzado $g_{t\phi}$:
+
+$$ds^2 = -\left(1 - \frac{2Mr}{\Sigma}\right)dt^2 - \frac{4aMr\sin^2\theta}{\Sigma}dtd\phi + \frac{\Sigma}{\Delta}dr^2 + \Sigma d\theta^2 + \left(r^2 + a^2 + \frac{2a^2Mr\sin^2\theta}{\Sigma}\right)\sin^2\theta d\phi^2$$
+
+O termo $g_{t\phi}$ induz o Frame-Dragging (arraste do referencial). Na Ergossfera, $g_{tt}$ torna-se positivo, forçando qualquer partícula a co-rotacionar com o buraco negro, impossibilitando órbitas estáticas. As integrais de movimento em Kerr incluem a Constante de Carter ($\mathcal{Q}$), gerando torques intrínsecos no cálculo do empuxo, favorecendo dramaticamente órbitas progradas em detrimento de órbitas retrógradas.
+
+### 2.4 Dinâmica de Atitude 6-DOF (Quaternions e Euler)
+
+O controle de orientação da sonda exige a transição dos ângulos de Euler tradicionais para os quaternions unitários $q = q_0 + q_1i + q_2j + q_3k$, erradicando o problema do Gimbal Lock.
+
+A evolução cinemática no tempo é governada por:
+
+
 $$\dot{q} = \frac{1}{2} \Omega(\boldsymbol{\omega}) q$$
-Onde $\boldsymbol{\omega} = [\omega_x, \omega_y, \omega_z]^T$ é o vetor de velocidade angular no sistema do corpo. 
 
-A dinâmica de rotação responde às Equações de Euler para um corpo rígido com tensor de inércia $\mathbf{I}$:
+A dinâmica obedece às Equações de Euler para rotação de corpos rígidos via tensor de inércia $\mathbf{I}$:
+
+
 $$\dot{\boldsymbol{\omega}} = \mathbf{I}^{-1} [\boldsymbol{\tau}_{\text{ext}} - \boldsymbol{\omega} \times (\mathbf{I}\boldsymbol{\omega})]$$
-Onde $\boldsymbol{\tau}_{\text{ext}}$ representa torques de controle interno ou gradientes de gravidade (maré relativística). O empuxo vetorizado mapeia o eixo estrutural do motor de volta para o referencial de simulação através da matriz de rotação $\mathbf{R}(q)$.
 
----
+No momento do acionamento do motor principal, o empuxo $\vec{F}$ (fixo no referencial da nave ao longo do eixo $\hat{k}$) é mapeado para o referencial coordenado pela matriz de transformação direcional de cossenos derivada de $q$, acoplando atitude e alteração orbital rigorosamente ($\vec{a}_{\text{thrust}} = \mathbf{R}(q) \cdot \frac{\vec{F}}{m}$).
 
-## 3. Método Numérico e Propagação de Incertezas
+## 3. Método Numérico e Propagação Estocástica
 
-### 3.1 Integrador de Passo Fixo (RK4 Otimizado)
-O motor resolve EDOs não lineares $\dot{\mathbf{y}} = f(t, \mathbf{y})$ com o método de Runge-Kutta de 4ª ordem, processado via matrizes densas na Eigen. A qualidade da integração é avaliada pela manutenção rigorosa de:
-1.  **Vínculo do Hamiltoniano**: $|\epsilon| = |p_r^2 + V_{\text{eff}} - \mathcal{E}^2| \to 0$.
-2.  **Norma do Quaternion**: $\|q\| = 1$, com tolerâncias mantidas abaixo do *machine epsilon* ($< 10^{-15}$).
+### 3.1 Runge-Kutta 4 Otimizado via Eigen
 
-### 3.2 Análise Computacional (Monte Carlo)
-A simulação abandona o determinismo de corpo único para incorporar uma análise de envelopes de missão. Através de simulações de Monte Carlo, aplica-se ruído estocástico (gaussiano) às variáveis de estado iniciais $[r_0, \phi_0, \mathbf{v}_0]$ e à eficiência do motor ($I_{sp}$). Isso mapeia os limites de instabilidade (e.g., captura inevitável vs escape) em regimes onde os gradientes de potencial são críticos.
+A integração das EDOs acopladas (variando de 7 a 13 estados por integração) é feita via RK4 de passo fixo alocado diretamente em structs mapeados para a biblioteca Eigen. A validação da estabilidade numérica do RK4 $\mathcal{O}(h^4)$ verifica a flutuação do invariante hamiltoniano ($|\epsilon| \to 0$) e a divergência da norma atitudinal ($|\|q\| - 1| \to 0$).
 
----
+### 3.2 Análise Computacional de Missão (Monte Carlo)
+
+A injeção em órbitas relativísticas puras (como a ISCO em $r=6M$ ou em torno de Kerr) possui margem de falha microscópica. O sistema automatiza a execução em lote (simulação de Monte Carlo), aplicando ruído gaussiano às condições iniciais do vetor de estado $\mathcal{N}(\mu_{state}, \sigma^2_{sensor})$ e analisando a distribuição das resultantes no hiperplano de fase. A análise estatística determina o envelope seguro de parâmetros $\Delta v$, tempos de queima e eficiências térmicas do sistema de propulsão.
 
 ## 4. Como Rodar
 
 ### 4.1 Dependências C++ (Eigen)
-O motor nativo utiliza a biblioteca **Eigen** para otimização de álgebra linear. Como a Eigen é uma biblioteca *header-only*, basta fazer o download do código-fonte para o diretório `third_party` do projeto antes de compilar.
 
-Você pode clonar o repositório oficial diretamente via Git:
+O motor nativo depende integralmente da biblioteca Eigen para otimização algébrica SIMD. Por ser uma biblioteca header-only, basta cloná-la para a pasta third_party do seu workspace.
+
+#### Crie a pasta third_party caso ela não exista
 
 ```bash
-# Crie a pasta third_party caso ela não exista
 mkdir -p third_party
-
-# Clone o repositório da Eigen
-git clone [https://gitlab.com/libeigen/eigen.git](https://gitlab.com/libeigen/eigen.git) third_party/eigen
-
-### 4.2 Executar Missões (Mission Runner)
-
-Processa planos de voo definidos em configuração YAML, acoplando a dinâmica orbital ao budget de massa.
-
-```bash
-python -m relorbit_py.run_mission --config src/relorbit_py/mission.yaml
-
 ```
 
-*(Certifique-se de que a estrutura fique de modo que o CMake consiga encontrar os headers em `third_party/eigen/Eigen`)*
+#### Clone o repositório da Eigen
 
-### 4.2 Instalação do Projeto
+```bash
+git clone [https://gitlab.com/libeigen/eigen.git](https://gitlab.com/libeigen/eigen.git) third_party/eigen
+```
 
-Com a dependência no lugar, o pacote Python chamará o sistema de build para compilar as bibliotecas nativas via `scikit-build-core`:
+(Certifique-se de que a estrutura resultante possua o caminho third_party/eigen/Eigen visível ao CMakeLists.txt do projeto).
+
+### 4.2 Compilação e Instalação do Projeto
+
+Com a Eigen preparada, invoque o pip para engatilhar o build do backend via scikit-build-core e compilar as dependências de Python via pybind11:
 
 ```bash
 python -m pip install -e .
-
 ```
 
-### 4.3 Validação Estrutural
+### 4.3 Validação Estrutural e Física
 
-Roda o suíte de testes contra predições analíticas (drift de energia, precessão, constância atitudinal).
+Para rodar a suíte de provas e testar as derivas de energia, precessões e conservação atitudinal:
 
 ```bash
 python -m relorbit_py.validate --plots
-
 ```
 
----
+### 4.4 Orquestração de Missões
 
-## 5. Referências Bibliográficas
+Para invocar o plano de voo e processar acoplamento 6-DOF, budget de massa e telemetria:
 
-1. BATE, R. R.; MUELLER, D. D.; WHITE, J. E. *Fundamentals of Astrodynamics*. Nova York: Dover Publications, 1971.
-2. CARROLL, S. M. *Spacetime and Geometry: An Introduction to General Relativity*. São Francisco: Addison-Wesley, 2004.
-3. CHOBOTOV, V. A. *Orbital Mechanics*. 3. ed. Reston: AIAA Education Series, 2002.
-4. CURTIS, H. D. *Orbital Mechanics for Engineering Students*. 4. ed. Oxford: Butterworth-Heinemann, 2020.
-5. MISNER, C. W.; THORNE, K. S.; WHEELER, J. A. *Gravitation*. Princeton: Princeton University Press, 2017.
-6. SCHUTZ, B. *A First Course in General Relativity*. 2. ed. Cambridge: Cambridge University Press, 2009.
-7. SILVA, W. R. *Equações Diferenciais Parciais*. Notas de Aula. Faculdade UnB Gama, Universidade de Brasília.
-8. SILVA, W. R. *Mecânica do Voo Espacial - Introdução*. Notas de Aula. Faculdade UnB Gama, Universidade de Brasília.
-9. SILVA, W. R. *Série de Fourier*. Notas de Aula. Faculdade UnB Gama, Universidade de Brasília.
-10. SUTTON, G. P.; BIBLARZ, O. *Rocket Propulsion Elements*. 7. ed. Nova York: John Wiley & Sons, 2001.
+```bash
+python -m relorbit_py.run_mission --config src/relorbit_py/mission.yaml
+```
+
+### 5. Referências Bibliográficas
+
+Os modelos matemáticos, escolhas numéricas e arquitetura de engenharia deste software foram fundamentados rigorosamente nas seguintes referências:
+
+* BATE, R. R.; MUELLER, D. D.; WHITE, J. E. Fundamentals of Astrodynamics. Nova York: Dover Publications, 1971.
+
+* CARROLL, S. M. Spacetime and Geometry: An Introduction to General Relativity. São Francisco: Addison-Wesley, 2004.
+
+* CHOBOTOV, V. A. Orbital Mechanics. 3. ed. Reston: AIAA Education Series, 2002.
+
+* CURTIS, H. D. Orbital Mechanics for Engineering Students. 4. ed. Oxford: Butterworth-Heinemann, 2020.
+
+* MISNER, C. W.; THORNE, K. S.; WHEELER, J. A. Gravitation. Princeton: Princeton University Press, 2017.
+
+* SCHUTZ, B. A First Course in General Relativity. 2. ed. Cambridge: Cambridge University Press, 2009.
+
+* SILVA, W. R. Equações Diferenciais Parciais. Notas de Aula. Faculdade UnB Gama, Universidade de Brasília.
+
+* SILVA, W. R. Mecânica do Voo Espacial - Introdução. Notas de Aula. Faculdade UnB Gama, Universidade de Brasília.
+
+* SILVA, W. R. Série de Fourier. Notas de Aula. Faculdade UnB Gama, Universidade de Brasília.
+
+* SUTTON, G. P.; BIBLARZ, O. Rocket Propulsion Elements. 7. ed. Nova York: John Wiley & Sons, 2001.
