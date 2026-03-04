@@ -2,41 +2,53 @@ project:
   name: relorbit
   repo: relativistic-spacecraft-orbits
   goal: >
-    Motor C++ + Python para simular órbitas (Newton e Schwarzschild equatorial),
-    com validação reprodutível (métricas + plots) e auditoria (eventos e diagnósticos).
+    Motor híbrido C++ (Eigen) + Python para simulação de missões espaciais 6-DOF 
+    em campos gravitacionais extremos (Newton, Schwarzschild e Kerr). 
+    Foco em alta fidelidade física, análise de Monte Carlo e visualização relativística.
 
 entrypoints:
   validate:
     cmd: python -m relorbit_py.validate
     cases: src/relorbit_py/cases.yaml
+  mission_runner:
+    cmd: python -m relorbit_py.run_mission
+    config: src/relorbit_py/mission.yaml
     outputs:
-      report: out/report.json
-      plots: out/plots
-      time_plots: out/time_plots
-      classical_plots: out/classical_validation_plots
+      missions: out/missions/
+      telemetry: out/missions/telemetry_plots/
+      attitude: out/missions/attitude_plots/
 
 models:
-  newton:
-    method: RK4 fixed-step
-    state0: [x, y, vx, vy]
-    metrics:
-      - energy_rel_drift
-      - h_rel_drift
-    status: [BOUND, UNBOUND]
-  schwarzschild_equatorial:
-    method: RK4 fixed-step (tau)
-    inputs: [M, E, L, r0, phi0, pr0]
-    events: [periapse, apoapse, r_cap, horizon]
-    diagnostics:
-      - epsilon = pr^2 + Veff(r) - E^2
-      - norm_u_theory (g(u,u)+1)
-      - time checks (tcoord/vcoord, dt/dtau, dv/dtau)
+  orbital_physics:
+    methods: [RK4 fixed-step, Eigen-optimized Geodesics]
+    metrics: [Schwarzschild, Kerr Equatorial, Newton]
+    invariants:
+      - epsilon: pr² + Veff(r) - E² (Energy conservation)
+      - carter_constant: (Para Kerr)
+    diagnostics: [Redshift log-log, GR Visibility/Shadow events, Latency/dt_dtau]
+
+  attitude_6dof (Item 7):
+    engine: C++ Eigen-based Quaternion Integrator
+    state: [q0, q1, q2, q3, wx, wy, wz]
+    features:
+      - Normalization: Controlled unit quaternion (drift < 1e-15)
+      - Dynamics: Euler equations with inverse inertia tensor
+      - Coupling: Support for Thrust Vectoring and Tidal Torques
+    validation: [T_rot conservation, ‖q‖ error check]
+
+  mission_analysis (Nova Camada):
+    monte_carlo:
+      goal: Uncertainty propagation and mission envelope safety
+      inputs: [Gaussian noise on state0, Mass M, Thrust efficiency]
+    visualization:
+      engine: Relativistic Ray Tracing (Path Tracing ready)
+      outputs: [Gravitational Lensing, Doppler Beaming, 6-DOF Spacecraft Render]
 
 validation_targets:
-  classical_schwarzschild:
-    perihelion_precession:
-      uses: periapse events
-      output: delta_phi_per_orbit + plot
-    isco:
-      criterion: stability changes near r ~ 6M
-      output: stable vs capture + r(tau) plots
+  astrophysics:
+    perihelion_precession: [Schwarzschild/Kerr vs Analytical]
+    isco_stability: [Stability transition at r ~ 6M]
+    frame_dragging: [Lense-Thirring effect in Kerr ergosphere]
+  engineering:
+    thrust_efficiency: [Mass budget vs Tsiolkovsky-GR]
+    attitude_stability: [Drift monitoring in long-duration burns]
