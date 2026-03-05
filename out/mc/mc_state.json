@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-03-05T11:43:00",
+  "done": 16,
+  "total": 100,
+  "n_pass": 16,
+  "n_capture": 0,
+  "n_error": 0,
+  "elapsed_s": 331.5,
+  "speed_sim_s": 0.05,
+  "r_final_mu": 13.12712824,
+  "r_final_sig": 1.14622764,
+  "eps_rms_mu": 0.02048176343178928,
+  "eps_rms_sig": 0.012671230090357666,
+  "qnorm_err_mu": 1.1102230246251565e-16,
+  "running": false
+}

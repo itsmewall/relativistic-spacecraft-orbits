@@ -114,9 +114,9 @@
         * A solução: Implementar um algoritmo de Otimização de Trajetória (como o método de gradiente ou algoritmos genéticos simples) para encontrar o perfil de empuxo que atinge o alvo com o mínimo consumo de massa.
 
 
-#### v5
+#### v5 🆗   
 
-    1. Simulação de Monte Carlo (Análise de Dispersão)
+    1. Simulação de Monte Carlo (Análise de Dispersão) 🆗
         * Em vez de simular uma trajetória, simule 100.000 ao mesmo tempo.
         * O detalhe: Cada "partícula" na sua nuvem teria um erro de sensor, uma variação de massa ou um ruído no empuxo.
         * O custo: O tempo de execução sobe linearmente. Se 1 rodada leva 1s, 100.000 rodadas levam 27 horas.
@@ -127,7 +127,7 @@
         * O detalhe: Implemente o Torque de Maré. Em campos gravitacionais extremos, a frente da nave é puxada com mais força que a traseira. Isso gera um torque que tenta "esticar" a nave (espaguetificação).
         * O custo: Você terá que calcular tensores de gradiente de gravidade a cada microssegundo de tempo próprio.
 
-    3. Integração de "Ray Tracing" de Telemetria
+    3. Integração de "Ray Tracing" de Telemetria 🆗
         * Em vez de apenas dizer "há visibilidade", simule os fótons saindo da antena da nave e viajando pelo espaço curvo até a Terra.
         * O detalhe: Para cada ponto da trajetória, dispare 1.000 "partículas de luz" (geodésicas nulas) em várias direções para ver quais atingem o receptor.
         * O custo: Isso transforma sua simulação em um algoritmo de busca, pesadíssimo para a CPU.
