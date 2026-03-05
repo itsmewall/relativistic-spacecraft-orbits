@@ -2,7 +2,7 @@
 
 ## CORREÇÕES
 
-#### v1
+#### v1 🆗
     1. Declarar convenções e unidades (obrigatório de banca) 🆗
 
         * Criar `docs/conventions.md` e referenciar no README.
@@ -56,7 +56,7 @@
         * gera `out/report.json`.
         * Critério: qualquer máquina roda igual, sem “passos mágicos”.
 
-#### v2
+#### v2 🆗
 
     1. Risco de Memória (Out of Memory) em Missões Longas 🆗
         O Problema: Hoje, o SolverCfg no C++ aceita apenas dt e n_steps. A cada passo do RK4, você dá um .push_back() nos vetores de tempo, posição, derivadas, etc. Se uma missão de transferência orbital levar meses e exigir 10^7 passos para manter a precisão do RK4, o seu C++ vai alocar Gigabytes de RAM e devolver listas gigantescas para o Python. O Matplotlib vai travar instantaneamente ao tentar plotar isso.
@@ -74,7 +74,7 @@
         A Solução: Para os cálculos do TCC, a interpolação linear até serve se o dt for minúsculo, mas o ideal é implementar uma Interpolação Cúbica de Hermite. Como o RK4 já te dá a posição e a velocidade (dr/dτ) nos dois pontos, nós podemos traçar uma curva suave e fisicamente exata para cravar o evento no milissegundo correto, sem precisar diminuir o dt da simulação inteira.
 
 
-#### v3
+#### v3 
 
     1. Extração de Invariantes Físicos (Verificação de Erro) 🆗
 
@@ -112,6 +112,25 @@
 
         * O problema: O Targeting atual por bisseção encontra uma manobra funcional, mas não necessariamente a mais eficiente. Em missões reais, é vital minimizar a integral do empuxo para maximizar a vida útil da sonda.
         * A solução: Implementar um algoritmo de Otimização de Trajetória (como o método de gradiente ou algoritmos genéticos simples) para encontrar o perfil de empuxo que atinge o alvo com o mínimo consumo de massa.
+
+
+#### v5
+
+    1. Simulação de Monte Carlo (Análise de Dispersão)
+        * Em vez de simular uma trajetória, simule 100.000 ao mesmo tempo.
+        * O detalhe: Cada "partícula" na sua nuvem teria um erro de sensor, uma variação de massa ou um ruído no empuxo.
+        * O custo: O tempo de execução sobe linearmente. Se 1 rodada leva 1s, 100.000 rodadas levam 27 horas.
+        * Resultado: Você gera um mapa de probabilidade de onde a nave estará. Isso é o que a NASA faz para pousar em Marte.
+
+    2. Acoplamento de Atitude de Alta Frequência 🆗
+        * Atualmente, você integra a atitude e a órbita. Mas e se a nave não for um ponto?
+        * O detalhe: Implemente o Torque de Maré. Em campos gravitacionais extremos, a frente da nave é puxada com mais força que a traseira. Isso gera um torque que tenta "esticar" a nave (espaguetificação).
+        * O custo: Você terá que calcular tensores de gradiente de gravidade a cada microssegundo de tempo próprio.
+
+    3. Integração de "Ray Tracing" de Telemetria
+        * Em vez de apenas dizer "há visibilidade", simule os fótons saindo da antena da nave e viajando pelo espaço curvo até a Terra.
+        * O detalhe: Para cada ponto da trajetória, dispare 1.000 "partículas de luz" (geodésicas nulas) em várias direções para ver quais atingem o receptor.
+        * O custo: Isso transforma sua simulação em um algoritmo de busca, pesadíssimo para a CPU.
 
 
 ## FEATURES

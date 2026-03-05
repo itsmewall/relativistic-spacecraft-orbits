@@ -48,6 +48,7 @@ pybind11_add_module(_engine
   src_cpp/include/relorbit/models/schwarzschild_6dof.hpp
   src_cpp/lib/gr/kerr_metric.cpp
   src_cpp/lib/kerr_6dof.cpp
+  src_cpp/lib/gr/kerr_null_geodesic.cpp
 )
 
 target_include_directories(_engine PRIVATE

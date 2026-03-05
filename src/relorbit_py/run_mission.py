@@ -47,6 +47,18 @@ from relorbit_py.simulate_kerr_6dof import (
     validate_kerr_6dof,
     plot_kerr_6dof,
 )
+from relorbit_py.null_geodesic_kerr import (
+    circular_orbit_omega,
+)
+from relorbit_py.telemetry_raytracer import (
+    TelemetryRayTracer,
+    TelemetryResult,
+    RayTracerConfig,
+)
+from relorbit_py.plot_raytracer import (
+    plot_raytracer_results,
+    print_raytracer_report,
+)
 
 
 # ── Atitude ───────────────────────────────────────────────────
@@ -198,6 +210,79 @@ def _run_kerr_6dof_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
         return False
 
 
+# ── Kerr Ray Tracer ───────────────────────────────────────────
+
+def _run_raytracer_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
+    """
+    Handler para model: kerr_raytracer.
+
+    Fluxo:
+      1. Integra órbita Kerr 6-DOF (mesmo solver que kerr_6dof)
+      2. Constrói TelemetryRayTracer via from_kerr_trajectory()
+         — LUT de N_lut raios nulos construída uma única vez
+      3. rt.run() → TelemetryResult (b*(τ), z(τ), Δt(τ) por busca binária)
+      4. Plots em out/missions/raytracer_plots/ + relatório no terminal
+
+    Parâmetros YAML (secção 'raytracer', todos opcionais):
+      receiver_r    : raio do receptor [M]   (default: 1000)
+      receiver_phi  : ângulo do receptor     (default: 0.0)
+      n_images_max  : imagens gravitacionais (default: 2)
+      n_lut         : raios na LUT           (default: 1000)
+      n_steps_lut   : passos RK4 por raio    (default: 12000)
+      dl_coarse     : passo longe do BH [M]  (default: 0.5)
+      dl_fine       : passo perto do BH [M]  (default: 0.05)
+      n_bisect      : iterações bissecção    (default: 50)
+      do_fan        : gerar leque de raios   (default: true)
+    """
+    name = m_cfg.get("name", "<sem-nome>")
+    try:
+        # ── 1. Órbita Kerr 6-DOF ──────────────────────────────────────
+        result_6dof = run_kerr_6dof_mission(m_cfg)
+        report_6dof = validate_kerr_6dof(result_6dof)
+        print(f"   [6DOF] Status : {report_6dof['status']}")
+        for note in report_6dof["notes"]:
+            print(f"   [6DOF] {note}")
+
+        traj = result_6dof.traj
+        if traj is None or not list(traj.tau):
+            print(f"   [ERRO] Trajectória vazia — ray tracing impossível.")
+            return False
+
+        # ── 2. Configuração do ray tracer ──────────────────────────────
+        rt_cfg_d = m_cfg.get("raytracer", {})
+        cfg = RayTracerConfig(
+            receiver_r    = float(rt_cfg_d.get("receiver_r",   1000.0)),
+            receiver_phi  = float(rt_cfg_d.get("receiver_phi",    0.0)),
+            n_lut         = int(rt_cfg_d.get("n_lut",           1000)),
+            n_steps_lut   = int(rt_cfg_d.get("n_steps_lut",   12_000)),
+            n_images_max  = int(rt_cfg_d.get("n_images_max",       2)),
+            dl_coarse     = float(rt_cfg_d.get("dl_coarse",      0.5)),
+            dl_fine       = float(rt_cfg_d.get("dl_fine",        0.05)),
+            n_bisect      = int(rt_cfg_d.get("n_bisect",          50)),
+        )
+        do_fan = bool(rt_cfg_d.get("do_fan", True))
+
+        # ── 3. Ray tracer via from_kerr_trajectory ─────────────────────
+        tracer = TelemetryRayTracer.from_kerr_trajectory(traj, cfg=cfg)
+        rt_result: TelemetryResult = tracer.run()
+
+        # ── 4. Relatório e plots ───────────────────────────────────────
+        print_raytracer_report(rt_result, name=name)
+
+        rt_outdir = os.path.join(outdir, "raytracer_plots")
+        plots = plot_raytracer_results(rt_result, rt_outdir, name=name, do_fan=do_fan)
+        for p in plots:
+            print(f"   Plot: {p}")
+
+        return report_6dof["status"] == "PASS"
+
+    except Exception as ex:
+        import traceback
+        print(f"   [ERRO] Falha na missao ray tracer {name}: {ex}")
+        traceback.print_exc()
+        return False
+
+
 # ── Runner principal ──────────────────────────────────────────
 
 def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
@@ -218,6 +303,11 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
 
         if model == "kerr_6dof":
             if not _run_kerr_6dof_mission(m_cfg, outdir):
+                all_ok = False
+            continue
+
+        if model == "kerr_raytracer":
+            if not _run_raytracer_mission(m_cfg, outdir):
                 all_ok = False
             continue
 

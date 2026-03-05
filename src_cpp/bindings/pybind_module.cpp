@@ -14,6 +14,7 @@
 #include "relorbit/models/attitude.hpp"
 #include "relorbit/models/schwarzschild_6dof.hpp"
 #include "relorbit/models/kerr_6dof.hpp"
+#include "relorbit/gr/kerr_null_geodesic.hpp"
 
 namespace py = pybind11;
 
@@ -245,8 +246,6 @@ PYBIND11_MODULE(_engine, m) {
         .def_readwrite("renorm_tol",   &relorbit::AttitudeCfg::renorm_tol);
 
     // ── TorqueCfg ─────────────────────────────────────────────
-    // tx/ty/tz são acessores (Eigen::Vector3d internamente),
-    // por isso usamos def_property em vez de def_readwrite.
     py::class_<relorbit::TorqueCfg>(m, "TorqueCfg")
         .def(py::init<>())
         .def_property("tx",   &relorbit::TorqueCfg::tx,  &relorbit::TorqueCfg::set_tx)
@@ -260,12 +259,10 @@ PYBIND11_MODULE(_engine, m) {
         .def("get_z",  &relorbit::TorqueCfg::get_z,  py::arg("t"));
 
     // ── InertiaTensor ─────────────────────────────────────────
-    // I é agora Eigen::Matrix3d — exposta como lista de 9 floats (row-major).
     py::class_<relorbit::InertiaTensor>(m, "InertiaTensor")
         .def(py::init<>())
         .def_property("I",
             [](const relorbit::InertiaTensor& it) {
-                // Matrix3d → lista Python de 9 elementos (row-major)
                 std::vector<double> v(9);
                 Eigen::Map<Eigen::Matrix<double,3,3,Eigen::RowMajor>>(v.data()) = it.I;
                 return v;
@@ -273,11 +270,6 @@ PYBIND11_MODULE(_engine, m) {
             [](relorbit::InertiaTensor& it, const std::vector<double>& v) {
                 if (v.size() != 9) throw std::invalid_argument("I must have 9 elements");
                 it.I = Eigen::Map<const Eigen::Matrix<double,3,3,Eigen::RowMajor>>(v.data());
-            })
-        .def_property_readonly("coeff",
-            [](const relorbit::InertiaTensor& it) {
-                // Conveniência: acesso por (i,j)
-                return [&it](int i, int j) { return it.coeff(i,j); };
             })
         .def_static("diagonal",
             &relorbit::InertiaTensor::diagonal,
@@ -299,8 +291,6 @@ PYBIND11_MODULE(_engine, m) {
             py::arg("vx"), py::arg("vy"), py::arg("vz"));
 
     // ── AttitudeState ─────────────────────────────────────────
-    // q e w são Eigen::Vector4d / Vector3d internamente;
-    // def_property expõe os acessores escalares ao Python.
     py::class_<relorbit::AttitudeState>(m, "AttitudeState")
         .def(py::init<>())
         .def_property("q0", &relorbit::AttitudeState::q0, &relorbit::AttitudeState::set_q0)
@@ -339,7 +329,6 @@ PYBIND11_MODULE(_engine, m) {
     m.def("dcm_from_quaternion",
         [](double q0, double q1, double q2, double q3) {
             relorbit::Mat3 R = relorbit::dcm_from_quaternion(q0, q1, q2, q3);
-            // Devolve lista de 9 floats row-major
             std::vector<double> v(9);
             Eigen::Map<Eigen::Matrix<double,3,3,Eigen::RowMajor>>(v.data()) = R;
             return v;
@@ -437,7 +426,6 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("pointing_err", &relorbit::TrajectoryCoupled::pointing_err)
         // Meta
         .def_readonly("M",            &relorbit::TrajectoryCoupled::M)
-        // ✅ FIX: status via lambda tem de ser property_readonly
         .def_property_readonly("status", [](const relorbit::TrajectoryCoupled& t) {
             switch (t.status) {
                 case relorbit::OrbitStatus::BOUND:   return std::string("BOUND");
@@ -524,7 +512,6 @@ PYBIND11_MODULE(_engine, m) {
         // Meta
         .def_readonly("M",            &relorbit::TrajectoryCoupledKerr::M)
         .def_readonly("a",            &relorbit::TrajectoryCoupledKerr::a)
-        // ✅ FIX: status via lambda tem de ser property_readonly
         .def_property_readonly("status", [](const relorbit::TrajectoryCoupledKerr& t) {
             switch (t.status) {
                 case relorbit::OrbitStatus::BOUND:   return std::string("BOUND");
@@ -548,4 +535,121 @@ PYBIND11_MODULE(_engine, m) {
         py::arg("cfg"),
         "Integra orbita + atitude + torque de mare acoplados em Kerr equatorial. "
         "Modelos de mare: WEAK_N, DIAG_EIJ, RIEMANN_FD (modo monstro).");
+
+    // ══════════════════════════════════════════════════════════════
+    // ── Geodésicas Nulas Kerr — Ray Tracing de Telemetria ─────────
+    // ══════════════════════════════════════════════════════════════
+
+    // ── NullGeodesicConfig ────────────────────────────────────────
+    py::class_<relorbit::gr::NullGeodesicConfig>(m, "NullGeodesicConfig")
+        .def(py::init<>())
+        .def_readwrite("M",          &relorbit::gr::NullGeodesicConfig::M)
+        .def_readwrite("a",          &relorbit::gr::NullGeodesicConfig::a)
+        .def_readwrite("r_obs",      &relorbit::gr::NullGeodesicConfig::r_obs)
+        .def_readwrite("n_lut",      &relorbit::gr::NullGeodesicConfig::n_lut)
+        .def_readwrite("n_steps",    &relorbit::gr::NullGeodesicConfig::n_steps)
+        .def_readwrite("dl_coarse",  &relorbit::gr::NullGeodesicConfig::dl_coarse)
+        .def_readwrite("dl_fine",    &relorbit::gr::NullGeodesicConfig::dl_fine)
+        .def_readwrite("r_switch",   &relorbit::gr::NullGeodesicConfig::r_switch)
+        .def_readwrite("n_bisect",   &relorbit::gr::NullGeodesicConfig::n_bisect)
+        .def("r_horizon",            &relorbit::gr::NullGeodesicConfig::r_horizon)
+        .def("b_crit_approx",        &relorbit::gr::NullGeodesicConfig::b_crit_approx);
+
+    // ── NullRayResult ─────────────────────────────────────────────
+    py::class_<relorbit::gr::NullRayResult>(m, "NullRayResult")
+        .def_readonly("b",          &relorbit::gr::NullRayResult::b)
+        .def_readonly("dphi",       &relorbit::gr::NullRayResult::dphi)
+        .def_readonly("t_coord",    &relorbit::gr::NullRayResult::t_coord)
+        .def_readonly("captured",   &relorbit::gr::NullRayResult::captured)
+        .def_readonly("n_turns",    &relorbit::gr::NullRayResult::n_turns);
+
+    // ── NullGeodesicLUT ───────────────────────────────────────────
+    py::class_<relorbit::gr::NullGeodesicLUT>(m, "NullGeodesicLUT")
+        .def_readonly("b_arr",      &relorbit::gr::NullGeodesicLUT::b_arr)
+        .def_readonly("phi_arr",    &relorbit::gr::NullGeodesicLUT::phi_arr)
+        .def_readonly("t_arr",      &relorbit::gr::NullGeodesicLUT::t_arr)
+        .def_readonly("cap_arr",    &relorbit::gr::NullGeodesicLUT::cap_arr)
+        .def_readonly("wind_arr",   &relorbit::gr::NullGeodesicLUT::wind_arr)
+        .def_readonly("r_s",        &relorbit::gr::NullGeodesicLUT::r_s)
+        .def("n_arrived",           &relorbit::gr::NullGeodesicLUT::n_arrived)
+        .def("n_captured",          &relorbit::gr::NullGeodesicLUT::n_captured)
+        .def("query_phi",           &relorbit::gr::NullGeodesicLUT::query_phi,
+             py::arg("dphi_target"), py::arg("winding") = 0,
+             "Interpola b* para um dado dphi_target. "
+             "Retorna (b_star, t_star) ou (nan, nan) se fora do intervalo.");
+
+    // ── TelemetrySignal ───────────────────────────────────────────
+    py::class_<relorbit::gr::TelemetrySignal::Image>(m, "TelemetryImage")
+        .def_readonly("b",           &relorbit::gr::TelemetrySignal::Image::b)
+        .def_readonly("dphi",        &relorbit::gr::TelemetrySignal::Image::dphi)
+        .def_readonly("t_coord",     &relorbit::gr::TelemetrySignal::Image::t_coord)
+        .def_readonly("redshift_z",  &relorbit::gr::TelemetrySignal::Image::redshift_z)
+        .def_readonly("time_delay",  &relorbit::gr::TelemetrySignal::Image::time_delay);
+
+    py::class_<relorbit::gr::TelemetrySignal>(m, "TelemetrySignal")
+        .def_readonly("tau_s",       &relorbit::gr::TelemetrySignal::tau_s)
+        .def_readonly("r_s",         &relorbit::gr::TelemetrySignal::r_s)
+        .def_readonly("phi_s",       &relorbit::gr::TelemetrySignal::phi_s)
+        .def_readonly("visible",     &relorbit::gr::TelemetrySignal::visible)
+        .def_readonly("n_images",    &relorbit::gr::TelemetrySignal::n_images)
+        .def_readonly("images",      &relorbit::gr::TelemetrySignal::images);
+
+    // ── RayTracerOptions ──────────────────────────────────────────
+    py::class_<relorbit::gr::RayTracerOptions>(m, "RayTracerOptions")
+        .def(py::init<>())
+        .def_readwrite("receiver_r",        &relorbit::gr::RayTracerOptions::receiver_r)
+        .def_readwrite("receiver_phi",      &relorbit::gr::RayTracerOptions::receiver_phi)
+        .def_readwrite("n_images_max",      &relorbit::gr::RayTracerOptions::n_images_max)
+        .def_readwrite("compute_redshift",  &relorbit::gr::RayTracerOptions::compute_redshift)
+        .def_readwrite("compute_delay",     &relorbit::gr::RayTracerOptions::compute_delay);
+
+    // ── Funções livres ────────────────────────────────────────────
+    m.def("integrate_null_ray",
+        &relorbit::gr::integrate_null_ray,
+        py::arg("cfg"), py::arg("b"), py::arg("r_s"), py::arg("dl") = 0.5,
+        "Integra uma geodésica nula Kerr equatorial de r_s até r_obs (ou captura). "
+        "Retorna NullRayResult com delta_phi, t_coord e status.");
+
+    m.def("build_null_geodesic_lut",
+        &relorbit::gr::build_null_geodesic_lut,
+        py::arg("cfg"), py::arg("r_s"),
+        "Constrói LUT de N_lut raios nulos para r_s fixo. "
+        "Cada query subsequente custa O(log N) em vez de O(N_steps).");
+
+    m.def("bisect_impact_parameter",
+        [](const relorbit::gr::NullGeodesicConfig& cfg,
+           double r_s, double phi_s, double phi_obs,
+           int winding,
+           const relorbit::gr::NullGeodesicLUT* lut)
+           -> py::object
+        {
+            auto res = relorbit::gr::bisect_impact_parameter(
+                cfg, r_s, phi_s, phi_obs, winding, lut);
+            if (!res.has_value()) return py::none();
+            return py::cast(*res);
+        },
+        py::arg("cfg"), py::arg("r_s"), py::arg("phi_s"), py::arg("phi_obs"),
+        py::arg("winding") = 0, py::arg("lut") = nullptr,
+        "Encontra b* tal que delta_phi(b*) = phi_obs - phi_s (+ winding). "
+        "Usa LUT como bracket inicial se fornecida. Retorna NullRayResult ou None.");
+
+    m.def("compute_redshift_kerr",
+        &relorbit::gr::compute_redshift_kerr,
+        py::arg("M"), py::arg("a"), py::arg("b"),
+        py::arg("r_s"), py::arg("r_obs"), py::arg("omega_s") = 0.0,
+        "Factor 1+z combinado (gravitacional + Doppler) para geodésica com parâmetro b. "
+        "omega_s = velocidade angular da nave [rad/M]; 0 = receptor estático.");
+
+    m.def("circular_orbit_omega",
+        &relorbit::gr::circular_orbit_omega,
+        py::arg("M"), py::arg("a"), py::arg("r"), py::arg("prograde") = true,
+        "Velocidade angular da órbita circular Kerr: sqrt(M) / (r^1.5 +/- a*sqrt(M)).");
+
+    m.def("raytrace_trajectory",
+        &relorbit::gr::raytrace_trajectory,
+        py::arg("cfg"), py::arg("opts"),
+        py::arg("tau_arr"), py::arg("r_arr"), py::arg("phi_arr"), py::arg("omega_arr"),
+        "Ray tracer completo para arrays de posição (tau, r, phi). "
+        "Constrói LUT uma vez para r_s mediano e consulta por busca binária. "
+        "Retorna lista de TelemetrySignal com visibilidade, b*, redshift e atraso Shapiro.");
 }
