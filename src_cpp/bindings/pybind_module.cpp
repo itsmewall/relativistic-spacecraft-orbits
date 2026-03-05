@@ -13,6 +13,7 @@
 #include "relorbit/models/kerr_lowthrust.hpp"
 #include "relorbit/models/attitude.hpp"
 #include "relorbit/models/schwarzschild_6dof.hpp"
+#include "relorbit/models/kerr_6dof.hpp"
 
 namespace py = pybind11;
 
@@ -359,8 +360,6 @@ PYBIND11_MODULE(_engine, m) {
         "Integra dinamica de atitude 6-DOF (q + w) com RK4 de passo fixo. "
         "Criterios: ||q||=1 (renormalizacao controlada) e T_rot conservada sem torque.");
 
-
-
     // ══════════════════════════════════════════════════════════════
     // Item 8 — Thrust Vectoring 6-DOF (Schwarzschild acoplado)
     // ══════════════════════════════════════════════════════════════
@@ -438,7 +437,8 @@ PYBIND11_MODULE(_engine, m) {
         .def_readonly("pointing_err", &relorbit::TrajectoryCoupled::pointing_err)
         // Meta
         .def_readonly("M",            &relorbit::TrajectoryCoupled::M)
-        .def_readonly("status",       [](const relorbit::TrajectoryCoupled& t) {
+        // ✅ FIX: status via lambda tem de ser property_readonly
+        .def_property_readonly("status", [](const relorbit::TrajectoryCoupled& t) {
             switch (t.status) {
                 case relorbit::OrbitStatus::BOUND:   return std::string("BOUND");
                 case relorbit::OrbitStatus::UNBOUND: return std::string("UNBOUND");
@@ -463,5 +463,89 @@ PYBIND11_MODULE(_engine, m) {
         "O empuxo e vectorizado pela orientacao actual do quaternion: "
         "a_thrust = (F/m) * R(q) * nozzle_body.");
 
+    // ── TidalModel enum ───────────────────────────────────────────
+    py::enum_<relorbit::TidalModel>(m, "TidalModel")
+        .value("NONE",       relorbit::TidalModel::NONE)
+        .value("WEAK_N",     relorbit::TidalModel::WEAK_N)
+        .value("DIAG_EIJ",   relorbit::TidalModel::DIAG_EIJ)
+        .value("RIEMANN_FD", relorbit::TidalModel::RIEMANN_FD);
 
-} // PYBIND11_MODULE
+    // ── TidalCfg ──────────────────────────────────────────────────
+    py::class_<relorbit::TidalCfg>(m, "TidalCfg")
+        .def(py::init<>())
+        .def_readwrite("enabled",         &relorbit::TidalCfg::enabled)
+        .def_readwrite("model",           &relorbit::TidalCfg::model)
+        .def_readwrite("fd_eps_r",        &relorbit::TidalCfg::fd_eps_r)
+        .def_readwrite("Q_from_inertia",  &relorbit::TidalCfg::Q_from_inertia)
+        .def_readwrite("spin_correction", &relorbit::TidalCfg::spin_correction);
+
+    // ── AttitudeCfgKerr ───────────────────────────────────────────
+    py::class_<relorbit::AttitudeCfgKerr>(m, "AttitudeCfgKerr")
+        .def(py::init<>())
+        .def_readwrite("inertia",       &relorbit::AttitudeCfgKerr::inertia)
+        .def_readwrite("ext_torque",    &relorbit::AttitudeCfgKerr::ext_torque)
+        .def_readwrite("renorm_every",  &relorbit::AttitudeCfgKerr::renorm_every)
+        .def_readwrite("renorm_tol",    &relorbit::AttitudeCfgKerr::renorm_tol)
+        .def_readwrite("tidal",         &relorbit::AttitudeCfgKerr::tidal);
+
+    // ── TrajectoryCoupledKerr ─────────────────────────────────────
+    py::class_<relorbit::TrajectoryCoupledKerr>(m, "TrajectoryCoupledKerr")
+        // Órbita
+        .def_readonly("tau",          &relorbit::TrajectoryCoupledKerr::tau)
+        .def_readonly("r",            &relorbit::TrajectoryCoupledKerr::r)
+        .def_readonly("phi",          &relorbit::TrajectoryCoupledKerr::phi)
+        .def_readonly("pr",           &relorbit::TrajectoryCoupledKerr::pr)
+        .def_readonly("E",            &relorbit::TrajectoryCoupledKerr::E)
+        .def_readonly("L",            &relorbit::TrajectoryCoupledKerr::L)
+        .def_readonly("mass",         &relorbit::TrajectoryCoupledKerr::mass)
+        .def_readonly("epsilon",      &relorbit::TrajectoryCoupledKerr::epsilon)
+        .def_readonly("tcoord",       &relorbit::TrajectoryCoupledKerr::tcoord)
+        // Atitude
+        .def_readonly("q0",           &relorbit::TrajectoryCoupledKerr::q0)
+        .def_readonly("q1",           &relorbit::TrajectoryCoupledKerr::q1)
+        .def_readonly("q2",           &relorbit::TrajectoryCoupledKerr::q2)
+        .def_readonly("q3",           &relorbit::TrajectoryCoupledKerr::q3)
+        .def_readonly("wx",           &relorbit::TrajectoryCoupledKerr::wx)
+        .def_readonly("wy",           &relorbit::TrajectoryCoupledKerr::wy)
+        .def_readonly("wz",           &relorbit::TrajectoryCoupledKerr::wz)
+        .def_readonly("qnorm",        &relorbit::TrajectoryCoupledKerr::qnorm)
+        .def_readonly("T_rot",        &relorbit::TrajectoryCoupledKerr::T_rot)
+        // Empuxo
+        .def_readonly("thrust_r",     &relorbit::TrajectoryCoupledKerr::thrust_r)
+        .def_readonly("thrust_phi",   &relorbit::TrajectoryCoupledKerr::thrust_phi)
+        .def_readonly("pointing_err", &relorbit::TrajectoryCoupledKerr::pointing_err)
+        // Maré
+        .def_readonly("tidal_tau_x",  &relorbit::TrajectoryCoupledKerr::tidal_tau_x)
+        .def_readonly("tidal_tau_y",  &relorbit::TrajectoryCoupledKerr::tidal_tau_y)
+        .def_readonly("tidal_tau_z",  &relorbit::TrajectoryCoupledKerr::tidal_tau_z)
+        .def_readonly("tidal_norm",   &relorbit::TrajectoryCoupledKerr::tidal_norm)
+        .def_readonly("align_angle_rad", &relorbit::TrajectoryCoupledKerr::align_angle_rad)
+        .def_readonly("tidal_E_norm", &relorbit::TrajectoryCoupledKerr::tidal_E_norm)
+        // Meta
+        .def_readonly("M",            &relorbit::TrajectoryCoupledKerr::M)
+        .def_readonly("a",            &relorbit::TrajectoryCoupledKerr::a)
+        // ✅ FIX: status via lambda tem de ser property_readonly
+        .def_property_readonly("status", [](const relorbit::TrajectoryCoupledKerr& t) {
+            switch (t.status) {
+                case relorbit::OrbitStatus::BOUND:   return std::string("BOUND");
+                case relorbit::OrbitStatus::UNBOUND: return std::string("UNBOUND");
+                case relorbit::OrbitStatus::CAPTURE: return std::string("CAPTURE");
+                default:                             return std::string("ERROR");
+            }
+        })
+        .def_readonly("message",      &relorbit::TrajectoryCoupledKerr::message);
+
+    // ── simulate_kerr_6dof_rk4 ───────────────────────────────────
+    m.def("simulate_kerr_6dof_rk4",
+        &relorbit::simulate_kerr_6dof_rk4,
+        py::arg("M"), py::arg("a"),
+        py::arg("E0"), py::arg("L0"),
+        py::arg("r0"), py::arg("phi0"), py::arg("pr0"),
+        py::arg("att0"),
+        py::arg("tau0"), py::arg("tauf"),
+        py::arg("engine"),
+        py::arg("att_cfg"),
+        py::arg("cfg"),
+        "Integra orbita + atitude + torque de mare acoplados em Kerr equatorial. "
+        "Modelos de mare: WEAK_N, DIAG_EIJ, RIEMANN_FD (modo monstro).");
+}

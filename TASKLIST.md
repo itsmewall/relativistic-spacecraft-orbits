@@ -171,7 +171,7 @@
 
 ### C - Atitude 6-DOF e GNC (P1)
 
-    7. Dinâmica de atitude com quaternions
+    7. Dinâmica de atitude com quaternions 🆗
         * Estado: q (4) + ω (3). Equações padrão.
         * Onde: novo módulo C++ (ou Python primeiro): `attitude.hpp` + bindings.
         * Critério: norma de q = 1 (com renormalização controlada), energia rotacional conservada sem torque.

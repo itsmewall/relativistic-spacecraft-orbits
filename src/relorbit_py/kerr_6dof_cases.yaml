@@ -1,0 +1,301 @@
+# kerr_6dof_cases.yaml
+# Casos de teste para o modelo Kerr 6-DOF com torque de maré.
+#
+# Executar:
+#   python -m relorbit_py.run_mission --yaml kerr_6dof_cases.yaml --out out/missions
+#
+# Casos:
+#   1. kerr_6dof_tidal_baseline    — sem torque tidal; T_rot deve ser constante
+#   2. kerr_6dof_weak_n            — WEAK_N: gravity-gradient clássico
+#   3. kerr_6dof_diag_eij          — DIAG_EIJ: quadrupolo + E_ij analítico
+#   4. kerr_6dof_riemann_fd        — RIEMANN_FD: Riemann numérico (modo monstro)
+#   5. kerr_6dof_riemann_fd_weakfield — campo fraco r=50M para validar convergência FD
+
+missions:
+
+  # ── 1. Baseline: sem maré — T_rot deve ser constante ────────────
+  - name: kerr_6dof_tidal_baseline
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5          # spin moderado de Kerr
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 1.0
+      q1: 0.0
+      q2: 0.0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.05
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton: 0.0
+      isp_s: 3000.0
+      mass0_kg: 1000.0
+      dry_mass_kg: 300.0
+      nozzle_body: [0.0, 0.0, 1.0]
+      tau_on: 0.0
+      tau_off: 0.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: false
+      model: NONE
+    span: [0.0, 500.0]
+    solver:
+      dt: 0.005
+      record_every: 20
+      renorm_every: 1
+      renorm_tol: 1.0e-9
+
+  # ── 2. Torque de maré WEAK_N ────────────────────────────────────
+  # FIX: q deve rodar em torno de y ou z, NÃO de x.
+  # Razão: n_body = R^T * [1,0,0]. Rotação em torno de x NÃO move [1,0,0]
+  # (eixo de rotação = eixo fixo), logo n_body permanece [1,0,0] → τ=0.
+  # Solução: q = 45° em torno de y → n_body = [cos45°, 0, sin45°] ≠ eixo principal.
+  # Verificação analítica: |τ_WEAK_N| = 3M/r³ * sin45°*cos45°*(Izz−Ixx) = 1.5e−1 N·m @ r=10M
+  - name: kerr_6dof_weak_n
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 0.9239       # cos(22.5°): rotação de 45° em torno de y
+      q1: 0.0
+      q2: 0.3827       # sin(22.5°): eixo y → n_body = [0.707, 0, 0.707] ≠ eixo principal
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.0
+    inertia:
+      Ixx: 50.0        # corpo assimétrico: Izz−Ixx=100 → torque não-nulo
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton: 0.0
+      isp_s: 3000.0
+      mass0_kg: 1000.0
+      dry_mass_kg: 300.0
+      nozzle_body: [0.0, 0.0, 1.0]
+      tau_on: 0.0
+      tau_off: 0.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: true
+      model: WEAK_N
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 500.0]
+    solver:
+      dt: 0.005
+      record_every: 20
+
+  # ── 3. Torque de maré DIAG_EIJ ──────────────────────────────────
+  - name: kerr_6dof_diag_eij
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.9           # spin alto — diferenças Kerr vs Schwarzschild visíveis
+      E: 0.96
+      L: 4.0
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 0.7071
+      q1: 0.0
+      q2: 0.7071
+      q3: 0.0
+      wx: 0.02
+      wy: 0.0
+      wz: 0.02
+    inertia:
+      Ixx: 50.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton: 0.0
+      isp_s: 3000.0
+      mass0_kg: 1000.0
+      dry_mass_kg: 300.0
+      nozzle_body: [0.0, 0.0, 1.0]
+      tau_on: 0.0
+      tau_off: 0.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: true
+      model: DIAG_EIJ
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: true   # correcção de spin Kerr
+    span: [0.0, 500.0]
+    solver:
+      dt: 0.005
+      record_every: 20
+
+  # ── 4. RIEMANN_FD (modo monstro) ────────────────────────────────
+  - name: kerr_6dof_riemann_fd
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 0.9659       # cos(15°): rotação de 30° em torno de y
+      q1: 0.0
+      q2: 0.2588       # sin(15°): n_body = [0.866, 0, 0.5] → τ_RIEMANN_FD ≠ 0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.01         # spin wy cria variação de q e acoplamento tidal adicional
+      wz: 0.0
+    inertia:
+      Ixx: 50.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton: 0.0
+      isp_s: 3000.0
+      mass0_kg: 1000.0
+      dry_mass_kg: 300.0
+      nozzle_body: [0.0, 0.0, 1.0]
+      tau_on: 0.0
+      tau_off: 0.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: true
+      model: RIEMANN_FD
+      fd_eps_r: 1.0e-5    # eps de produção; diagnóstico FD usa h_diag=r*0.05 separado
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 300.0]    # menor span pois é mais pesado
+    solver:
+      dt: 0.005
+      record_every: 20
+
+  # ── 5. RIEMANN_FD campo fraco r=50M (validação E_ij ≈ diag) ─────
+  - name: kerr_6dof_riemann_fd_weakfield
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.3
+      E: 0.999           # quase parabólica para ficar a r grande
+      L: 7.0
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [50.0, 0.0]   # r=50M → campo fraco
+    pr0: 0.0
+    attitude0:
+      q0: 0.9239       # 45° em torno de y: E_body não diagonal → [Q,E]≠0 → τ≠0
+      q1: 0.0
+      q2: 0.3827
+      q3: 0.0
+      wx: 0.0
+      wy: 0.005        # spin pequeno para evolução quaternion (e portanto τ tidal)
+      wz: 0.0
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton: 0.0
+      isp_s: 3000.0
+      mass0_kg: 1000.0
+      dry_mass_kg: 300.0
+      nozzle_body: [0.0, 0.0, 1.0]
+      tau_on: 0.0
+      tau_off: 0.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: true
+      model: RIEMANN_FD
+      fd_eps_r: 1.0e-4    # eps de produção; diagnóstico usa h_diag=r*0.05=2.5M separado
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 200.0]
+    solver:
+      dt: 0.01
+      record_every: 10
+
+  # ── 6. Kerr 6-DOF com empuxo + maré acoplados ───────────────────
+  - name: kerr_6dof_thrust_plus_tidal
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 1.0
+      q1: 0.0
+      q2: 0.0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.02
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton: 50.0
+      isp_s: 3000.0
+      mass0_kg: 1000.0
+      dry_mass_kg: 300.0
+      nozzle_body: [0.0, 0.0, 1.0]
+      tau_on: 0.0
+      tau_off: 400.0
+      torque_reaction: [0.0, 0.0, 0.0]
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: true
+      model: DIAG_EIJ
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: true
+    span: [0.0, 500.0]
+    solver:
+      dt: 0.005
+      record_every: 20

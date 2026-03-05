@@ -42,6 +42,11 @@ from relorbit_py.attitude_mission import (
     run_attitude_mission,
     validate_attitude,
 )
+from relorbit_py.simulate_kerr_6dof import (
+    run_kerr_6dof_mission,
+    validate_kerr_6dof,
+    plot_kerr_6dof,
+)
 
 
 # ── Atitude ───────────────────────────────────────────────────
@@ -106,7 +111,7 @@ def _run_attitude_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
         return False
 
 
-# ── 6-DOF Thrust Vectoring ────────────────────────────────────
+# ── 6-DOF Schwarzschild ───────────────────────────────────────
 
 def _plot_6dof(result: Any, outdir: str) -> List[str]:
     traj = result.traj
@@ -169,6 +174,30 @@ def _run_6dof_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
         return False
 
 
+# ── Kerr 6-DOF ────────────────────────────────────────────────
+
+def _run_kerr_6dof_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
+    name = m_cfg.get("name", "<sem-nome>")
+    try:
+        result = run_kerr_6dof_mission(m_cfg)
+        report = validate_kerr_6dof(result)
+        print(f"   Status : {report['status']}")
+        for note in report["notes"]:
+            print(f"   {note}")
+        for k, v in report["metrics"].items():
+            if isinstance(v, float):
+                print(f"   {k}: {v:.6g}")
+        tidal_outdir = os.path.join(outdir, "kerr_6dof_plots")
+        for p in plot_kerr_6dof(result, tidal_outdir):
+            print(f"   Plot: {p}")
+        return report["status"] == "PASS"
+    except Exception as ex:
+        import traceback
+        print(f"   [ERRO] Falha na missao Kerr 6-DOF {name}: {ex}")
+        traceback.print_exc()
+        return False
+
+
 # ── Runner principal ──────────────────────────────────────────
 
 def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
@@ -184,6 +213,11 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
 
         if model == "schwarzschild_6dof":
             if not _run_6dof_mission(m_cfg, outdir):
+                all_ok = False
+            continue
+
+        if model == "kerr_6dof":
+            if not _run_kerr_6dof_mission(m_cfg, outdir):
                 all_ok = False
             continue
 
@@ -231,7 +265,7 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
 # ── CLI ───────────────────────────────────────────────────────
 
 def _find_yaml() -> str:
-    for c in ["mission.yaml", "src/relorbit_py/mission.yaml"]:
+    for c in ["mission.yaml", "kerr_6dof_cases.yaml", "src/relorbit_py/mission.yaml"]:
         if os.path.exists(c):
             return c
     raise FileNotFoundError(

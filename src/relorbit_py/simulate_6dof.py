@@ -76,7 +76,11 @@ class Result6DOF:
         tphi = np.array(t.thrust_phi)
 
         max_qerr = float(np.max(np.abs(qn - 1.0))) if len(qn) else float("nan")
-        Tr_drift = float((np.max(Tr) - np.min(Tr)) / abs(Tr[0])) if len(Tr) and abs(Tr[0]) > 1e-30 else float("nan")
+        # FIX-A: drift robusto — evita nan quando T_rot(0)=0 (sem spin inicial)
+        T0 = float(Tr[0]) if len(Tr) else 0.0
+        T_abs_drift = float(np.max(Tr) - np.min(Tr)) if len(Tr) else float("nan")
+        eps_T = max(1e-30, 1e-12 * abs(T0))
+        Tr_drift = T_abs_drift / abs(T0) if abs(T0) > eps_T else float("nan")
         eps_rms  = float(np.sqrt(np.mean(eps**2))) if len(eps) else float("nan")
         dv_total = float(np.trapz(np.sqrt(tr**2 + tphi**2), tau)) if len(tr) > 1 else 0.0
 
@@ -87,6 +91,8 @@ class Result6DOF:
             "r_range":         [float(np.min(t.r)), float(np.max(t.r))],
             "mass_consumed_kg": float(mass[0] - mass[-1]) if len(mass) else 0.0,
             "qnorm_max_err":   max_qerr,
+            "T_rot0":          T0,
+            "T_rot_abs_drift": T_abs_drift,
             "T_rot_rel_drift": Tr_drift,
             "epsilon_rms":     eps_rms,
             "dv_geom_integral": dv_total,

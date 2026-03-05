@@ -7,8 +7,8 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "relorbit"
-version = "0.1.3"
-description = "Hybrid C++/Python engine for Newton vs Schwarzschild orbits with validation and mission envelopes."
+version = "1.1.7"
+description = "Numerical simulation of spacecraft orbits in the relativistic regime near black holes. Includes Newtonian vs GR comparison, perihelion precession, ISCO, time dilation, and mission feasibility analysis. Implements geodesic integration, validation benchmarks, and visualization tools for field-strength scenarios."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
