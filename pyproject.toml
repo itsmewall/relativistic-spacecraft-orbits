@@ -7,7 +7,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "relorbit"
-version = "1.1.9"
+version = "1.2.2"
 description = "Numerical simulation of spacecraft orbits in the relativistic regime near black holes. Includes Newtonian vs GR comparison, perihelion precession, ISCO, time dilation, and mission feasibility analysis. Implements geodesic integration, validation benchmarks, and visualization tools for field-strength scenarios."
 readme = "README.md"
 requires-python = ">=3.11"

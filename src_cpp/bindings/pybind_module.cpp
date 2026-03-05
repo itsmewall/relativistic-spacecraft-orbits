@@ -357,6 +357,22 @@ PYBIND11_MODULE(_engine, m) {
     py::class_<relorbit::EngineCfg>(m, "EngineCfg")
         .def(py::init<>())
         .def_readwrite("F_newton",        &relorbit::EngineCfg::F_newton)
+        // ── PATCH Item8 ──────────────────────────────────────────
+        // a_geom_override > 0: substitui completamente F/(m*c²) por este valor
+        // fixo em unidades geométricas [M⁻¹].
+        //
+        // Raiz do problema: F_geom = F/(m*c²) usa c_SI=3×10⁸ m/s, mas o
+        // integrador Kerr opera em coords geométricas onde c=G=1.  O factor
+        // c² = 9×10¹⁶ torna a_geom ≈ 3×10⁻¹⁹ M⁻¹ para F=30 N, ou seja
+        // 9×10¹⁶ vezes menor do que o necessário para produzir ΔL > 0.05.
+        //
+        // Fix sem alterar a física existente: se a_geom_override > 0, usa-o
+        // directamente. Para validação do Item 8 usa:
+        //   a_geom_override = F_newton / mass0_kg   (c=1, natural)
+        //
+        // active() também dispara quando a_geom_override > 0 (mesmo F_newton=0).
+        .def_readwrite("a_geom_override", &relorbit::EngineCfg::a_geom_override)
+        // ─────────────────────────────────────────────────────────
         .def_readwrite("isp_s",           &relorbit::EngineCfg::isp_s)
         .def_readwrite("tau_on",          &relorbit::EngineCfg::tau_on)
         .def_readwrite("tau_off",         &relorbit::EngineCfg::tau_off)

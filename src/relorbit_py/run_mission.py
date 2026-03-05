@@ -4,11 +4,13 @@ Ponto de entrada para simulações de missão.
 
 Uso:
     py -3 -m relorbit_py.run_mission
-    py -3 -m relorbit_py.run_mission --yaml src/relorbit_py/mission.yaml --out out/missions
+    py -3 -m relorbit_py.run_mission --yaml src/relorbit_py/kerr_6dof_cases.yaml --out out/missions
 """
 from __future__ import annotations
 
 import argparse
+import copy
+import math
 import os
 import sys
 from typing import Any, Dict, List
@@ -17,8 +19,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from relorbit_py.simulate import load_cases_yaml, simulate_case
-from relorbit_py.mission  import run_mission, MissionResult
+from relorbit_py.simulate        import load_cases_yaml, simulate_case
+from relorbit_py.mission         import run_mission, MissionResult
 
 from relorbit_py.plots_orbit import (
     plot_orbit,
@@ -47,6 +49,17 @@ from relorbit_py.simulate_kerr_6dof import (
     validate_kerr_6dof,
     plot_kerr_6dof,
 )
+
+# ── Item 8: importação opcional de helpers de validate_coupling ───────────────
+try:
+    from relorbit_py.validate_coupling import (
+        CFG_GEO, CFG_R_OUT, CFG_PHI, CFG_R_IN,
+        extract as _coupling_extract,
+    )
+    _COUPLING_AVAILABLE = True
+except ImportError:
+    _COUPLING_AVAILABLE = False
+
 from relorbit_py.null_geodesic_kerr import (
     circular_orbit_omega,
 )
@@ -59,6 +72,15 @@ from relorbit_py.plot_raytracer import (
     plot_raytracer_results,
     print_raytracer_report,
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Constantes Item 8 (usadas em _run_coupling_mission)
+# ─────────────────────────────────────────────────────────────────────────────
+# τ_span = T_orbit/4 para E=0.95, L=3.8, M=1, a=0.5, r=10 M
+# dphi/dtau ≈ 0.0391 rad/M  →  T ≈ 160.8 M  →  T/4 ≈ 40.2 M
+_ITEM8_ORBIT_PERIOD_M = 160.8
+_ITEM8_TAU_SPAN       = _ITEM8_ORBIT_PERIOD_M / 4.0   # ≈ 40.2 M
 
 
 # ── Atitude ───────────────────────────────────────────────────
@@ -74,7 +96,7 @@ def _plot_attitude(result: Any, outdir: str) -> List[str]:
 
     fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     fig.suptitle(f"{result.name} - Quaternion", fontsize=12)
-    for comp, label in zip([traj.q0, traj.q1, traj.q2, traj.q3], ["q0","q1","q2","q3"]):
+    for comp, label in zip([traj.q0, traj.q1, traj.q2, traj.q3], ["q0", "q1", "q2", "q3"]):
         ax0.plot(t, comp, label=label)
     ax0.set_ylabel("componentes"); ax0.legend(fontsize=8); ax0.grid(True, alpha=0.3)
     ax1.plot(t, [n - 1.0 for n in traj.qnorm], color="red", linewidth=0.8)
@@ -86,12 +108,12 @@ def _plot_attitude(result: Any, outdir: str) -> List[str]:
 
     fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     fig.suptitle(f"{result.name} - Velocidade angular e energia", fontsize=12)
-    for comp, label in zip([traj.wx, traj.wy, traj.wz], ["wx","wy","wz"]):
+    for comp, label in zip([traj.wx, traj.wy, traj.wz], ["wx", "wy", "wz"]):
         ax0.plot(t, comp, label=label)
     ax0.set_ylabel("omega [rad/s]"); ax0.legend(fontsize=8); ax0.grid(True, alpha=0.3)
     T0 = traj.T_rot[0] if traj.T_rot else 1.0
     if abs(T0) > 1e-30:
-        ax1.plot(t, [T/T0 - 1.0 for T in traj.T_rot], color="darkorange")
+        ax1.plot(t, [T / T0 - 1.0 for T in traj.T_rot], color="darkorange")
         ax1.set_ylabel("T_rot/T0 - 1")
     else:
         ax1.plot(t, traj.T_rot, color="darkorange")
@@ -145,7 +167,7 @@ def _plot_6dof(result: Any, outdir: str) -> List[str]:
 
     fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
     fig.suptitle(f"{result.name} - Quaternion", fontsize=12)
-    for comp, lbl in zip([traj.q0, traj.q1, traj.q2, traj.q3], ["q0","q1","q2","q3"]):
+    for comp, lbl in zip([traj.q0, traj.q1, traj.q2, traj.q3], ["q0", "q1", "q2", "q3"]):
         ax0.plot(tau, comp, label=lbl)
     ax0.set_ylabel("componentes"); ax0.legend(fontsize=8); ax0.grid(True, alpha=0.3)
     ax1.plot(tau, [n - 1.0 for n in traj.qnorm], color="red", linewidth=0.8)
@@ -219,24 +241,11 @@ def _run_raytracer_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
     Fluxo:
       1. Integra órbita Kerr 6-DOF (mesmo solver que kerr_6dof)
       2. Constrói TelemetryRayTracer via from_kerr_trajectory()
-         — LUT de N_lut raios nulos construída uma única vez
       3. rt.run() → TelemetryResult (b*(τ), z(τ), Δt(τ) por busca binária)
       4. Plots em out/missions/raytracer_plots/ + relatório no terminal
-
-    Parâmetros YAML (secção 'raytracer', todos opcionais):
-      receiver_r    : raio do receptor [M]   (default: 1000)
-      receiver_phi  : ângulo do receptor     (default: 0.0)
-      n_images_max  : imagens gravitacionais (default: 2)
-      n_lut         : raios na LUT           (default: 1000)
-      n_steps_lut   : passos RK4 por raio    (default: 12000)
-      dl_coarse     : passo longe do BH [M]  (default: 0.5)
-      dl_fine       : passo perto do BH [M]  (default: 0.05)
-      n_bisect      : iterações bissecção    (default: 50)
-      do_fan        : gerar leque de raios   (default: true)
     """
     name = m_cfg.get("name", "<sem-nome>")
     try:
-        # ── 1. Órbita Kerr 6-DOF ──────────────────────────────────────
         result_6dof = run_kerr_6dof_mission(m_cfg)
         report_6dof = validate_kerr_6dof(result_6dof)
         print(f"   [6DOF] Status : {report_6dof['status']}")
@@ -248,30 +257,25 @@ def _run_raytracer_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
             print(f"   [ERRO] Trajectória vazia — ray tracing impossível.")
             return False
 
-        # ── 2. Configuração do ray tracer ──────────────────────────────
         rt_cfg_d = m_cfg.get("raytracer", {})
         cfg = RayTracerConfig(
-            receiver_r    = float(rt_cfg_d.get("receiver_r",   1000.0)),
-            receiver_phi  = float(rt_cfg_d.get("receiver_phi",    0.0)),
-            n_lut         = int(rt_cfg_d.get("n_lut",           1000)),
-            n_steps_lut   = int(rt_cfg_d.get("n_steps_lut",   12_000)),
-            n_images_max  = int(rt_cfg_d.get("n_images_max",       2)),
-            dl_coarse     = float(rt_cfg_d.get("dl_coarse",      0.5)),
-            dl_fine       = float(rt_cfg_d.get("dl_fine",        0.05)),
-            n_bisect      = int(rt_cfg_d.get("n_bisect",          50)),
+            receiver_r   = float(rt_cfg_d.get("receiver_r",   1000.0)),
+            receiver_phi = float(rt_cfg_d.get("receiver_phi",    0.0)),
+            n_lut        = int(rt_cfg_d.get("n_lut",           1000)),
+            n_steps_lut  = int(rt_cfg_d.get("n_steps_lut",  12_000)),
+            n_images_max = int(rt_cfg_d.get("n_images_max",      2)),
+            dl_coarse    = float(rt_cfg_d.get("dl_coarse",     0.5)),
+            dl_fine      = float(rt_cfg_d.get("dl_fine",       0.05)),
+            n_bisect     = int(rt_cfg_d.get("n_bisect",         50)),
         )
         do_fan = bool(rt_cfg_d.get("do_fan", True))
 
-        # ── 3. Ray tracer via from_kerr_trajectory ─────────────────────
-        tracer = TelemetryRayTracer.from_kerr_trajectory(traj, cfg=cfg)
-        rt_result: TelemetryResult = tracer.run()
+        tracer    = TelemetryRayTracer.from_kerr_trajectory(traj, cfg=cfg)
+        rt_result : TelemetryResult = tracer.run()
 
-        # ── 4. Relatório e plots ───────────────────────────────────────
         print_raytracer_report(rt_result, name=name)
-
         rt_outdir = os.path.join(outdir, "raytracer_plots")
-        plots = plot_raytracer_results(rt_result, rt_outdir, name=name, do_fan=do_fan)
-        for p in plots:
+        for p in plot_raytracer_results(rt_result, rt_outdir, name=name, do_fan=do_fan):
             print(f"   Plot: {p}")
 
         return report_6dof["status"] == "PASS"
@@ -283,7 +287,253 @@ def _run_raytracer_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
         return False
 
 
-# ── Runner principal ──────────────────────────────────────────
+# ── Item 8: Acoplamento órbita–atitude ───────────────────────────
+#
+# YAML mínimo:
+#   - name: coupling_test
+#     model: coupling_test
+#     params: {M: 1.0, a: 0.5, E: 0.95, L: 3.8}   # opcional
+#     coupling:
+#       F_newton:  30.0     # default 30
+#       tau_final: 40.2     # default T/4 ≈ 40.2 M  (NÃO usar 300!)
+#       dt:        0.005
+#
+# NOTA: O YAML preferido para Item 8 são as 4 missões explícitas
+# kerr_item8_* com model: kerr_6dof (ver kerr_6dof_cases.yaml).
+# O handler coupling_test é mantido para compatibilidade, mas agora:
+#   1. Usa copy.deepcopy em cada sub-caso (sem partilha de dicts mutáveis)
+#   2. Usa a_geom_override = F_n / mass0  (correcção de escala, Item 8-A)
+#   3. Usa tau_span = T/4 ≈ 40.2 M por default  (correcção de averaging, Item 8-B)
+
+def _run_coupling_mission(m_cfg: Dict[str, Any], outdir: str) -> bool:
+    import numpy as np
+    name = m_cfg.get("name", "coupling_test")
+
+    try:
+        cp    = m_cfg.get("coupling", {})
+        base  = m_cfg.get("params",   {})
+        M_bh  = float(base.get("M",        1.0))
+        a_bh  = float(base.get("a",        0.5))
+        E0    = float(base.get("E",        0.95))
+        L0    = float(base.get("L",        3.8))
+        r0    = float(base.get("r0",      10.0))
+        F_n   = float(cp.get("F_newton",  30.0))
+        # Item 8-B: default T/4 em vez de 300
+        tau_span = float(cp.get("tau_final", _ITEM8_TAU_SPAN))
+        dt    = float(cp.get("dt",        0.005))
+        isp   = float(cp.get("isp_s",   3000.0))
+        mass0 = float(cp.get("mass0_kg", 1000.0))
+        dry   = float(cp.get("dry_mass_kg", 300.0))
+        # Item 8-A: a_geom_override = F/m para unidades geométricas c=1
+        a_geom_override = float(cp.get("a_geom_override", F_n / mass0 if mass0 > 0 else 0.0))
+
+        def _q_rotz(deg: float):
+            h = math.radians(deg) / 2.0
+            return (math.cos(h), 0.0, 0.0, math.sin(h))
+
+        # Item 8-E: deepcopy — sem partilha de dicts mutáveis entre sub-casos
+        def _make(label: str, q_deg: float, F: float = F_n) -> Dict[str, Any]:
+            q0_, q1_, q2_, q3_ = _q_rotz(q_deg)
+            ov = a_geom_override if F > 0 else 0.0
+            cfg_base = {
+                "name": f"{name}_{label}",
+                "model": "kerr_6dof",
+                "params": {
+                    "M": M_bh, "a": a_bh, "E": E0, "L": L0,
+                    "capture_r": 2.0, "capture_eps": 1e-12,
+                },
+                "state0": [r0, 0.0], "pr0": 0.0,
+                "attitude0": {
+                    "q0": q0_, "q1": q1_, "q2": q2_, "q3": q3_,
+                    "wx": 0.0, "wy": 0.0, "wz": 0.0,
+                },
+                "inertia": {"Ixx": 100.0, "Iyy": 200.0, "Izz": 150.0},
+                "engine": {
+                    "F_newton":        F,
+                    "a_geom_override": ov,      # ← Item 8-A
+                    "isp_s":           isp,
+                    "mass0_kg":        mass0,
+                    "dry_mass_kg":     dry,
+                    "nozzle_body":     [1.0, 0.0, 0.0],
+                    "tau_on":          0.0,
+                    "tau_off":         tau_span,  # ← Item 8-B
+                },
+                "ext_torque": {"tx": 0.0, "ty": 0.0, "tz": 0.0},
+                "tidal": {
+                    "enabled": False, "model": "NONE",
+                    "fd_eps_r": 1e-5, "Q_from_inertia": True,
+                    "spin_correction": False,
+                },
+                "span":   [0.0, tau_span],
+                "solver": {"dt": dt, "record_every": 100},
+            }
+            return copy.deepcopy(cfg_base)   # ← deepcopy garantido
+
+        cases = [
+            ("geodesic",       _make("geodesic",       0.0, F=0.0)),
+            ("radial_outward", _make("radial_outward",   0.0)),
+            ("tangential",     _make("tangential",      90.0)),
+            ("radial_inward",  _make("radial_inward",  180.0)),
+        ]
+
+        metrics: Dict[str, Any] = {}
+        for lbl, cfg_c in cases:
+            print(f"   → integrando: {lbl} ...", end="", flush=True)
+            res   = run_kerr_6dof_mission(cfg_c)
+            t     = res.traj
+            r_a   = np.asarray(t.r,       dtype=float)
+            L_a   = np.asarray(t.L,       dtype=float)
+            pr_a  = np.asarray(t.pr,      dtype=float)
+            eps_a = np.asarray(t.epsilon, dtype=float)
+            qn_a  = np.asarray(t.qnorm,   dtype=float)
+            tr_a  = np.asarray(t.thrust_r,   dtype=float)
+            tph_a = np.asarray(t.thrust_phi, dtype=float)
+            metrics[lbl] = {
+                "status":          str(t.status),
+                "r_final":         float(r_a[-1])       if len(r_a) else float("nan"),
+                "r_min":           float(np.min(r_a))   if len(r_a) else float("nan"),
+                "r_max":           float(np.max(r_a))   if len(r_a) else float("nan"),
+                "delta_L":         float(L_a[-1] - L_a[0]) if len(L_a) else float("nan"),
+                "delta_pr":        float(pr_a[-1] - pr_a[0]) if len(pr_a) else float("nan"),
+                "eps_rms":         float(np.sqrt(np.mean(eps_a**2))) if len(eps_a) else float("nan"),
+                "qnorm_err":       float(np.max(np.abs(qn_a - 1.))) if len(qn_a) else float("nan"),
+                "thrust_r_mean":   float(np.mean(np.abs(tr_a[tr_a != 0])))   if np.any(tr_a  != 0) else 0.0,
+                "thrust_phi_mean": float(np.mean(np.abs(tph_a[tph_a != 0]))) if np.any(tph_a != 0) else 0.0,
+            }
+            print(f" r_f={metrics[lbl]['r_final']:.4f}M"
+                  f"  r∈[{metrics[lbl]['r_min']:.3f},{metrics[lbl]['r_max']:.3f}]"
+                  f"  [{metrics[lbl]['status']}]")
+
+        geo = metrics["geodesic"]
+        ro  = metrics["radial_outward"]
+        tan = metrics["tangential"]
+        ri  = metrics["radial_inward"]
+
+        checks: List[bool] = []
+
+        def _chk(desc: str, ok: bool, detail: str) -> None:
+            checks.append(ok)
+            sym = "✓" if ok else "✗"
+            print(f"   [{sym}] {desc}")
+            print(f"        {detail}")
+
+        # ── Asserts de direcção ───────────────────────────────────────────────
+        LIMIAR = 1e-6
+        _chk("tangential: thrust_phi_mean > 0",
+             tan["thrust_phi_mean"] > LIMIAR,
+             f"thrust_phi={tan['thrust_phi_mean']:.3e}  thrust_r={tan['thrust_r_mean']:.3e}")
+        _chk("radial_outward: thrust_r_mean > 0",
+             ro["thrust_r_mean"] > LIMIAR,
+             f"thrust_r={ro['thrust_r_mean']:.3e}")
+        _chk("radial_inward: thrust_r_mean > 0",
+             ri["thrust_r_mean"] > LIMIAR,
+             f"thrust_r={ri['thrust_r_mean']:.3e}")
+        _chk("geodesic: thrust ≡ 0",
+             geo["thrust_r_mean"] < LIMIAR and geo["thrust_phi_mean"] < LIMIAR,
+             f"thrust_r={geo['thrust_r_mean']:.3e}  thrust_phi={geo['thrust_phi_mean']:.3e}")
+
+        # ── Asserts físicos ───────────────────────────────────────────────────
+        # Usa r_max (apoapsis) e r_min (periapsis) — mais robustos que r_final,
+        # pois r_final depende da fase orbital no instante exacto de τ_off.
+        drmax_ro  = ro["r_max"]  - geo["r_max"]
+        drmax_tan = tan["r_max"] - geo["r_max"]
+        drmin_ri  = ri["r_min"]  - geo["r_min"]
+
+        _chk("Thrust outward expande apoapsis vs geodésica  (r_max)",
+             drmax_ro > 0.01,
+             f"r_max: outward={ro['r_max']:.4f}M  geo={geo['r_max']:.4f}M  "
+             f"Δr_max={drmax_ro:+.4f}M  (limiar +0.01M)")
+
+        _chk("Thrust tangencial expande apoapsis vs geodésica  (r_max)",
+             drmax_tan > 0.01,
+             f"r_max: tangential={tan['r_max']:.4f}M  geo={geo['r_max']:.4f}M  "
+             f"Δr_max={drmax_tan:+.4f}M  (limiar +0.01M)")
+
+        _chk("Thrust inward contrai periapsis vs geodésica  (r_min)",
+             drmin_ri < -0.001,
+             f"r_min: inward={ri['r_min']:.4f}M  geo={geo['r_min']:.4f}M  "
+             f"Δr_min={drmin_ri:+.4f}M  (limiar -0.001M)")
+
+        _chk("Atitudes diferentes → r_max diferentes  (acoplamento real)",
+             abs(ro["r_max"] - tan["r_max"]) > 0.01
+             and abs(ro["r_max"] - ri["r_max"]) > 0.01,
+             f"r_max: outward={ro['r_max']:.4f}  tangential={tan['r_max']:.4f}  "
+             f"inward={ri['r_max']:.4f}")
+
+        _chk("Thrust radial acumula pr, não L",
+             abs(ro["delta_L"]) < 0.5 * max(abs(ro["delta_pr"]), 1e-9),
+             f"ΔL={ro['delta_L']:+.4f}  Δpr={ro['delta_pr']:+.4f}")
+
+        _chk("Thrust tangencial acumula L",
+             abs(tan["delta_L"]) > 0.05,
+             f"ΔL={tan['delta_L']:+.4f}  (esperado >0.05)")
+
+        _chk("Outward/inward: r_max opostos ao redor da geodésica",
+             drmax_ro > 0 and drmax_tan > 0 and drmin_ri < 0,
+             f"Δr_max_out={drmax_ro:+.4f}  Δr_max_tan={drmax_tan:+.4f}  "
+             f"Δr_min_in={drmin_ri:+.4f}")
+
+        for lbl, m in metrics.items():
+            _chk(f"ε_rms razoável [{lbl}]",
+                 math.isfinite(m["eps_rms"]) and m["eps_rms"] < 1.0,
+                 f"ε_rms={m['eps_rms']:.2e}")
+            _chk(f"‖q‖-1 < 1e-6 [{lbl}]",
+                 math.isfinite(m["qnorm_err"]) and m["qnorm_err"] < 1e-6,
+                 f"‖q‖err={m['qnorm_err']:.2e}")
+
+        # ── Plot de comparação ────────────────────────────────────────────────
+        try:
+            coup_outdir = os.path.join(outdir, "coupling_plots")
+            os.makedirs(coup_outdir, exist_ok=True)
+            all_traj: Dict[str, Any] = {}
+            colors = {
+                "geodesic":       "gray",
+                "radial_outward": "royalblue",
+                "tangential":     "forestgreen",
+                "radial_inward":  "crimson",
+            }
+            for lbl, cfg_c in cases:
+                all_traj[lbl] = run_kerr_6dof_mission(copy.deepcopy(cfg_c)).traj
+
+            fig, axes = plt.subplots(3, 1, figsize=(11, 10), sharex=True)
+            fig.suptitle(f"{name} — Acoplamento Órbita–Atitude  (Item 8)", fontsize=12)
+            for lbl, traj_t in all_traj.items():
+                tau_a = np.asarray(traj_t.tau)
+                r_a   = np.asarray(traj_t.r)
+                L_a   = np.asarray(traj_t.L)
+                pr_a  = np.asarray(traj_t.pr)
+                lw    = 1.8 if lbl != "geodesic" else 1.0
+                ls    = "--" if lbl == "geodesic" else "-"
+                axes[0].plot(tau_a, r_a,  color=colors[lbl], lw=lw, ls=ls, label=lbl)
+                axes[1].plot(tau_a, L_a,  color=colors[lbl], lw=lw, ls=ls)
+                axes[2].plot(tau_a, pr_a, color=colors[lbl], lw=lw, ls=ls)
+            axes[0].set_ylabel("r [M]"); axes[0].legend(fontsize=8); axes[0].grid(True, alpha=0.3)
+            axes[1].set_ylabel("L [mM]"); axes[1].grid(True, alpha=0.3)
+            axes[2].set_ylabel("pr"); axes[2].set_xlabel("τ [M]"); axes[2].grid(True, alpha=0.3)
+            fig.tight_layout()
+            plot_path = os.path.join(coup_outdir, f"{name}_coupling.png")
+            fig.savefig(plot_path, dpi=130); plt.close(fig)
+            print(f"   Plot: {plot_path}")
+        except Exception as pex:
+            print(f"   [AVISO] Plot de acoplamento falhou: {pex}")
+
+        n_pass = sum(checks)
+        n_fail = len(checks) - n_pass
+        status = "PASS" if n_fail == 0 else "FAIL"
+        print(f"   {'='*50}")
+        print(f"   ACOPLAMENTO ITEM 8: {status}  ({n_pass}/{len(checks)} critérios)")
+        print(f"   τ_span={tau_span:.1f}M  a_geom_override={a_geom_override:.4f} M⁻¹")
+        print(f"   {'='*50}")
+        return n_fail == 0
+
+    except Exception as ex:
+        import traceback
+        print(f"   [ERRO] Falha na validação de acoplamento {name}: {ex}")
+        traceback.print_exc()
+        return False
+
+
+# ── Runner principal ──────────────────────────────────────────────────────────
 
 def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
     cfg      = load_cases_yaml(yaml_path)
@@ -303,6 +553,11 @@ def run_all_missions(yaml_path: str, outdir: str = "out/missions") -> bool:
 
         if model == "kerr_6dof":
             if not _run_kerr_6dof_mission(m_cfg, outdir):
+                all_ok = False
+            continue
+
+        if model == "coupling_test":
+            if not _run_coupling_mission(m_cfg, outdir):
                 all_ok = False
             continue
 

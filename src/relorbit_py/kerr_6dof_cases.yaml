@@ -2,14 +2,27 @@
 # Casos de teste para o modelo Kerr 6-DOF com torque de maré.
 #
 # Executar:
-#   python -m relorbit_py.run_mission --yaml kerr_6dof_cases.yaml --out out/missions
+#   py -3 -m relorbit_py.run_mission --yaml src/relorbit_py/kerr_6dof_cases.yaml --out out/missions
 #
 # Casos:
-#   1. kerr_6dof_tidal_baseline    — sem torque tidal; T_rot deve ser constante
-#   2. kerr_6dof_weak_n            — WEAK_N: gravity-gradient clássico
-#   3. kerr_6dof_diag_eij          — DIAG_EIJ: quadrupolo + E_ij analítico
-#   4. kerr_6dof_riemann_fd        — RIEMANN_FD: Riemann numérico (modo monstro)
-#   5. kerr_6dof_riemann_fd_weakfield — campo fraco r=50M para validar convergência FD
+#   1.  kerr_6dof_tidal_baseline       — sem torque tidal; T_rot deve ser constante
+#   2.  kerr_6dof_weak_n               — WEAK_N: gravity-gradient clássico
+#   3.  kerr_6dof_diag_eij             — DIAG_EIJ: quadrupolo + E_ij analítico
+#   4.  kerr_6dof_riemann_fd           — RIEMANN_FD: Riemann numérico (modo monstro)
+#   5.  kerr_6dof_riemann_fd_weakfield — campo fraco r=50M para validar convergência FD
+#   6.  kerr_6dof_thrust_plus_tidal    — empuxo + maré acoplados
+#   7.  kerr_raytracer_demo            — ray tracing de telemetria (geodésicas nulas Kerr)
+#   ── Item 8: Acoplamento Órbita–Atitude via Thrust ──────────────────────────
+#   8.  kerr_item8_geodesic_ref        — geodésica de referência (F=0)
+#   9.  kerr_item8_radial_outward      — nozzle +r  (q=identidade)
+#   10. kerr_item8_tangential          — nozzle +φ  (q=rotz 90°)
+#   11. kerr_item8_radial_inward       — nozzle −r  (q=rotz 180°)
+#
+# NOTA Item 8:
+#   a_geom_override = F/m = 30/1000 = 0.03 M⁻¹  (bypassa F/(m·c²_SI) que daria
+#   a_geom ≈ 3×10⁻¹⁹ M⁻¹, i.e., 9×10¹⁶× menor — indetectável em τ=40 M).
+#   tau_off = 40.2 M = T/4 (T≈160.8M) — evita cancelamento por averaging orbital.
+#   validate_coupling.py verifica estes 4 casos de forma autónoma.
 
 missions:
 
@@ -18,7 +31,7 @@ missions:
     model: kerr_6dof
     params:
       M: 1.0
-      a: 0.5          # spin moderado de Kerr
+      a: 0.5
       E: 0.95
       L: 3.8
       capture_r: 2.0
@@ -60,11 +73,8 @@ missions:
       renorm_tol: 1.0e-9
 
   # ── 2. Torque de maré WEAK_N ────────────────────────────────────
-  # FIX: q deve rodar em torno de y ou z, NÃO de x.
-  # Razão: n_body = R^T * [1,0,0]. Rotação em torno de x NÃO move [1,0,0]
-  # (eixo de rotação = eixo fixo), logo n_body permanece [1,0,0] → τ=0.
-  # Solução: q = 45° em torno de y → n_body = [cos45°, 0, sin45°] ≠ eixo principal.
-  # Verificação analítica: |τ_WEAK_N| = 3M/r³ * sin45°*cos45°*(Izz−Ixx) = 1.5e−1 N·m @ r=10M
+  # q = 45° em torno de y → n_body = [0.707, 0, 0.707] ≠ eixo principal.
+  # Verificação: |τ_WEAK_N| = 3M/r³ * sin45°*cos45°*(Izz−Ixx) ≈ 1.5×10⁻¹ N·m @ r=10M
   - name: kerr_6dof_weak_n
     model: kerr_6dof
     params:
@@ -77,15 +87,15 @@ missions:
     state0: [10.0, 0.0]
     pr0: 0.0
     attitude0:
-      q0: 0.9239       # cos(22.5°): rotação de 45° em torno de y
+      q0: 0.9239
       q1: 0.0
-      q2: 0.3827       # sin(22.5°): eixo y → n_body = [0.707, 0, 0.707] ≠ eixo principal
+      q2: 0.3827
       q3: 0.0
       wx: 0.0
       wy: 0.0
       wz: 0.0
     inertia:
-      Ixx: 50.0        # corpo assimétrico: Izz−Ixx=100 → torque não-nulo
+      Ixx: 50.0
       Iyy: 200.0
       Izz: 150.0
     engine:
@@ -116,7 +126,7 @@ missions:
     model: kerr_6dof
     params:
       M: 1.0
-      a: 0.9           # spin alto — diferenças Kerr vs Schwarzschild visíveis
+      a: 0.9
       E: 0.96
       L: 4.0
       capture_r: 2.0
@@ -152,7 +162,7 @@ missions:
       model: DIAG_EIJ
       fd_eps_r: 1.0e-5
       Q_from_inertia: true
-      spin_correction: true   # correcção de spin Kerr
+      spin_correction: true
     span: [0.0, 500.0]
     solver:
       dt: 0.005
@@ -171,12 +181,12 @@ missions:
     state0: [10.0, 0.0]
     pr0: 0.0
     attitude0:
-      q0: 0.9659       # cos(15°): rotação de 30° em torno de y
+      q0: 0.9659
       q1: 0.0
-      q2: 0.2588       # sin(15°): n_body = [0.866, 0, 0.5] → τ_RIEMANN_FD ≠ 0
+      q2: 0.2588
       q3: 0.0
       wx: 0.0
-      wy: 0.01         # spin wy cria variação de q e acoplamento tidal adicional
+      wy: 0.01
       wz: 0.0
     inertia:
       Ixx: 50.0
@@ -197,10 +207,10 @@ missions:
     tidal:
       enabled: true
       model: RIEMANN_FD
-      fd_eps_r: 1.0e-5    # eps de produção; diagnóstico FD usa h_diag=r*0.05 separado
+      fd_eps_r: 1.0e-5
       Q_from_inertia: true
       spin_correction: false
-    span: [0.0, 300.0]    # menor span pois é mais pesado
+    span: [0.0, 300.0]
     solver:
       dt: 0.005
       record_every: 20
@@ -211,19 +221,19 @@ missions:
     params:
       M: 1.0
       a: 0.3
-      E: 0.999           # quase parabólica para ficar a r grande
+      E: 0.999
       L: 7.0
       capture_r: 2.0
       capture_eps: 1.0e-12
-    state0: [50.0, 0.0]   # r=50M → campo fraco
+    state0: [50.0, 0.0]
     pr0: 0.0
     attitude0:
-      q0: 0.9239       # 45° em torno de y: E_body não diagonal → [Q,E]≠0 → τ≠0
+      q0: 0.9239
       q1: 0.0
       q2: 0.3827
       q3: 0.0
       wx: 0.0
-      wy: 0.005        # spin pequeno para evolução quaternion (e portanto τ tidal)
+      wy: 0.005
       wz: 0.0
     inertia:
       Ixx: 100.0
@@ -244,7 +254,7 @@ missions:
     tidal:
       enabled: true
       model: RIEMANN_FD
-      fd_eps_r: 1.0e-4    # eps de produção; diagnóstico usa h_diag=r*0.05=2.5M separado
+      fd_eps_r: 1.0e-4
       Q_from_inertia: true
       spin_correction: false
     span: [0.0, 200.0]
@@ -299,17 +309,8 @@ missions:
     solver:
       dt: 0.005
       record_every: 20
+
   # ── 7. Ray Tracing de Telemetria (geodésicas nulas Kerr) ────────
-  # model: kerr_raytracer  =  kerr_6dof + LUT de geodésicas nulas
-  #
-  # Fluxo:
-  #   1. Integra órbita Kerr 6-DOF (mesmo solver que kerr_6dof)
-  #   2. Constrói LUT de 1000 raios nulos uma única vez para r_s mediano
-  #   3. Para cada ponto da trajectória: busca binária na LUT → b*(τ), z(τ), Δt(τ)
-  #
-  # Plots gerados em out/missions/raytracer_plots/:
-  #   deflection_map, visibility, impact_parameter, redshift,
-  #   time_delay, sky_map, ray_fan
   - name: kerr_raytracer_demo
     model: kerr_raytracer
     params:
@@ -363,3 +364,224 @@ missions:
       n_bisect:         50
       compute_redshift: true
       do_fan:           true
+
+  # ════════════════════════════════════════════════════════════════
+  # ITEM 8 — Acoplamento Órbita–Atitude via Thrust
+  # ════════════════════════════════════════════════════════════════
+  #
+  # 4 missões explícitas (model: kerr_6dof).  Validadas por:
+  #   py -3 validate_coupling.py
+  #
+  # Parâmetros comuns:
+  #   M=1, a=0.5, E=0.95, L=3.8, r0=10M, pr0=0
+  #   F_newton=30N, a_geom_override=0.03 M⁻¹ (=F/m, c=1)
+  #   tau_off=40.2M (=T/4, T≈160.8M — evita averaging)
+  #   nozzle_body=[1,0,0], mass0_kg=1000, dry_mass_kg=300, isp_s=3000
+  #   tidal: desactivado (isola o efeito do thrust)
+  #
+  # Critérios de PASS (validate_coupling.py):
+  #   ① thrust_phi_mean(tangential) > 1e-6  (direcção φ correcta)
+  #   ② thrust_r_mean(radial_outward) > 1e-6  (direcção r correcta)
+  #   ③ |ΔL(tangential)| > 0.05  (≈ 7.68 com estes parâmetros)
+  #   ④ r_final(outward) ≠ r_final(tangential) ≠ r_final(inward)  (>0.01M)
+  #   ⑤ efeitos opostos: r_out > r_geo > r_in  (outward expande, inward contrai)
+  #   ⑥ ‖q‖−1 < 1e-6 para todos os casos
+
+  # ── 8. Geodésica de referência (F=0) ────────────────────────────
+  - name: kerr_item8_geodesic_ref
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 1.0          # identidade — sem rotação
+      q1: 0.0
+      q2: 0.0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.0
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton:        0.0   # motor DESLIGADO — geodésica pura
+      a_geom_override: 0.0
+      isp_s:           3000.0
+      mass0_kg:        1000.0
+      dry_mass_kg:     300.0
+      nozzle_body:     [1.0, 0.0, 0.0]
+      tau_on:          0.0
+      tau_off:         0.0
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: false
+      model: NONE
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 40.2]
+    solver:
+      dt: 0.005
+      record_every: 50
+
+  # ── 9. Thrust radial outward (q = identidade) ───────────────────
+  # nozzle_body=[1,0,0] + q=I  →  n_iner = R·[1,0,0] = [1,0,0]
+  # Em φ=0: n_r=1, n_φ=0  →  dpr/dτ aumenta, dL/dτ ≈ 0
+  - name: kerr_item8_radial_outward
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 1.0          # identidade: n_body=[1,0,0] → n_iner=[1,0,0] → thrust em +r
+      q1: 0.0
+      q2: 0.0
+      q3: 0.0
+      wx: 0.0
+      wy: 0.0
+      wz: 0.0
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton:        30.0
+      a_geom_override: 0.03   # = F/m = 30/1000 M⁻¹  (bypassa F/(m*c²_SI))
+      isp_s:           3000.0
+      mass0_kg:        1000.0
+      dry_mass_kg:     300.0
+      nozzle_body:     [1.0, 0.0, 0.0]
+      tau_on:          0.0
+      tau_off:         40.2   # T/4 ≈ 40.2 M  (evita cancelamento por averaging)
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: false
+      model: NONE
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 40.2]
+    solver:
+      dt: 0.005
+      record_every: 50
+
+  # ── 10. Thrust tangencial (q = rotz 90°) ────────────────────────
+  # nozzle_body=[1,0,0] + q=rotz(90°)  →  R·[1,0,0] = [0,1,0]
+  # Em φ=0: n_r≈0, n_φ=1  →  dL/dτ >> 0  (maior acumulação de L)
+  - name: kerr_item8_tangential
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 0.7071       # cos(45°) = rotz(90°): R·[1,0,0]=[0,1,0] → thrust em +φ
+      q1: 0.0
+      q2: 0.0
+      q3: 0.7071       # sin(45°)
+      wx: 0.0
+      wy: 0.0
+      wz: 0.0
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton:        30.0
+      a_geom_override: 0.03
+      isp_s:           3000.0
+      mass0_kg:        1000.0
+      dry_mass_kg:     300.0
+      nozzle_body:     [1.0, 0.0, 0.0]
+      tau_on:          0.0
+      tau_off:         40.2
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: false
+      model: NONE
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 40.2]
+    solver:
+      dt: 0.005
+      record_every: 50
+
+  # ── 11. Thrust radial inward (q = rotz 180°) ────────────────────
+  # nozzle_body=[1,0,0] + q=rotz(180°)  →  R·[1,0,0] = [-1,0,0]
+  # Em φ=0: n_r=-1, n_φ≈0  →  dpr/dτ decresce (força de contração)
+  # Esperado: r_final(inward) < r_final(geodesic) < r_final(outward)
+  - name: kerr_item8_radial_inward
+    model: kerr_6dof
+    params:
+      M: 1.0
+      a: 0.5
+      E: 0.95
+      L: 3.8
+      capture_r: 2.0
+      capture_eps: 1.0e-12
+    state0: [10.0, 0.0]
+    pr0: 0.0
+    attitude0:
+      q0: 0.0          # cos(90°) = rotz(180°): R·[1,0,0]=[-1,0,0] → thrust em −r
+      q1: 0.0
+      q2: 0.0
+      q3: 1.0          # sin(90°)
+      wx: 0.0
+      wy: 0.0
+      wz: 0.0
+    inertia:
+      Ixx: 100.0
+      Iyy: 200.0
+      Izz: 150.0
+    engine:
+      F_newton:        30.0
+      a_geom_override: 0.03
+      isp_s:           3000.0
+      mass0_kg:        1000.0
+      dry_mass_kg:     300.0
+      nozzle_body:     [1.0, 0.0, 0.0]
+      tau_on:          0.0
+      tau_off:         40.2
+    ext_torque:
+      tx: 0.0
+      ty: 0.0
+      tz: 0.0
+    tidal:
+      enabled: false
+      model: NONE
+      fd_eps_r: 1.0e-5
+      Q_from_inertia: true
+      spin_correction: false
+    span: [0.0, 40.2]
+    solver:
+      dt: 0.005
+      record_every: 50

@@ -235,6 +235,14 @@ def _build_engine(d: Dict[str, Any]):
     eng = d.get("engine", {})
     e = _engine().EngineCfg()
     e.F_newton    = float(eng.get("F_newton",    0.0))
+    # ── PATCH Item 8 ──────────────────────────────────────────────────────────
+    # a_geom_override > 0 bypassa F/(m·c²_SI).
+    # Necessário quando o integrador usa unidades geométricas c=G=1.
+    # F_geom = F/(m·c²) com c_SI = 3e8 dá a_geom ≈ 3e-19 M⁻¹,
+    # ou seja 9e16× menor do que o correcto para c=1.
+    # Valor típico: F_newton / mass0_kg  (= 0.03 M⁻¹ para F=30N, m=1000kg).
+    e.a_geom_override = float(eng.get("a_geom_override", 0.0))
+    # ─────────────────────────────────────────────────────────────────────────
     e.isp_s       = float(eng.get("isp_s",       3000.0))
     e.tau_on      = float(eng.get("tau_on",       0.0))
     e.tau_off     = float(eng.get("tau_off",      1e18))
