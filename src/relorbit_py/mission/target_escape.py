@@ -1,7 +1,5 @@
 # src/relorbit_py/target_escape.py
-import numpy as np
-import relorbit_py as rp
-from relorbit_py.simulate import simulate_case
+from relorbit_py.core.simulate import simulate_case
 import matplotlib.pyplot as plt
 import os
 

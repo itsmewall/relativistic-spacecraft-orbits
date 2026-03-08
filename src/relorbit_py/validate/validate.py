@@ -6,8 +6,8 @@ import json
 import os
 from typing import Any, Dict, List
 
-from . import engine_hello
-from .simulate import load_cases_yaml
+from relorbit_py import engine_hello
+from relorbit_py.core.simulate import load_cases_yaml
 from .validate_helpers import fmt_e, fmt_f, short_msg
 from .validate_models import (
     validate_newton,
@@ -314,7 +314,7 @@ def handle_isco_suite(cases: List[Dict[str, Any]], args: Any, plotdir: str, time
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cases", default=os.path.join(os.path.dirname(__file__), "cases.yaml"))
+    ap.add_argument("--cases", default=os.path.join(os.path.dirname(__file__), "..", "mission", "cases.yaml"))
     ap.add_argument("--plots", action="store_true", help="Generate plots in <out>/plots and time plots in <out>/time_plots")
     ap.add_argument("--out", default="out", help="Output directory")
     ap.add_argument("--convergence", action="store_true", help="Run automatic dt refinement (dt, dt/2, dt/4) for Newton cases and estimate observed order.")

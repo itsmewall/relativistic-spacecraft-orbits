@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from relorbit_py.mission import MissionResult
-from relorbit_py.plots_orbit import _horizon_radius
+from relorbit_py.plots.plots_orbit import _horizon_radius
 
 
 # ── Bandas de qualidade ───────────────────────────────────────

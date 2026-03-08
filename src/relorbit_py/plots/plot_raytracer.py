@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 
-from relorbit_py.telemetry_raytracer import TelemetryResult
+from relorbit_py.telemetry.telemetry_raytracer import TelemetryResult
 
 
 # ── Paleta comum ──────────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ def plot_ray_fan(result: TelemetryResult, outdir: str,
     step = max(1, len(b_sel) // n_rays_show)
     b_show = b_sel[::step][:n_rays_show]
 
-    from relorbit_py.null_geodesic_kerr import _kerr_null_potential
+    from relorbit_py.telemetry.null_geodesic_kerr import _kerr_null_potential
 
     r_hor = M + math.sqrt(max(M**2 - a**2, 0.0))
     r_cap = r_hor * 1.005

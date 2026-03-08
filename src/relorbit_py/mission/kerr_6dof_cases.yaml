@@ -2,7 +2,7 @@
 # Casos de teste para o modelo Kerr 6-DOF com torque de maré.
 #
 # Executar:
-#   py -3 -m relorbit_py.run_mission --yaml src/relorbit_py/kerr_6dof_cases.yaml --out out/missions
+#   py -3 -m relorbit_py.mission.run_mission --yaml src/relorbit_py/mission/kerr_6dof_cases.yaml --out out/missions
 #
 # Casos:
 #   1.  kerr_6dof_tidal_baseline       — sem torque tidal; T_rot deve ser constante

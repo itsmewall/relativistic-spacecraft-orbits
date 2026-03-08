@@ -1,7 +1,5 @@
 # src/relorbit_py/target_periapse.py
-import numpy as np
-import relorbit_py as rp
-from relorbit_py.simulate import simulate_case
+from relorbit_py.core.simulate import simulate_case
 import os
 
 def find_periapse_maneuver(r0=20.0, target_rp=3.0, tol=1e-4):

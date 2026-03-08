@@ -27,7 +27,10 @@ ALGORITMO (3 modos)
 
 INTEGRAÇÃO COM O PIPELINE EXISTENTE
 ====================================
-  from relorbit_py.telemetry_raytracer import TelemetryRayTracer, RayTracerConfig
+  from relorbit_py.telemetry.telemetry_raytracer import (
+      TelemetryRayTracer,
+      RayTracerConfig,
+  )
   
   rt = TelemetryRayTracer.from_kerr_trajectory(traj, receiver_phi=0.0)
   result = rt.run()   # retorna TelemetryResult
@@ -43,7 +46,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from relorbit_py.null_geodesic_kerr import (
+from relorbit_py.telemetry.null_geodesic_kerr import (
     KerrNullConfig,
     NullGeodesicLUT,
     TelemetryPoint,
@@ -424,7 +427,7 @@ class TelemetryRayTracer:
         Modo de alta precisão: bissecção b* para cada ponto.
         Recomendado para calcular atrasos de tempo e redshifts exactos.
         """
-        from relorbit_py.null_geodesic_kerr import bisect_impact_parameter
+        from relorbit_py.telemetry.null_geodesic_kerr import bisect_impact_parameter
         M, a = self.M, self.a
         cfg  = self.cfg
         ncfg = self._null_cfg

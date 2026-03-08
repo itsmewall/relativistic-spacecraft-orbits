@@ -54,7 +54,7 @@ import numpy as np
 
 # ── importar engine ───────────────────────────────────────────────────────────
 try:
-    from relorbit_py.simulate_kerr_6dof import run_kerr_6dof_mission, ResultKerr6DOF
+    from relorbit_py.core.simulate_kerr_6dof import run_kerr_6dof_mission, ResultKerr6DOF
 except ImportError as e:
     print(f"[ERRO] Não foi possível importar simulate_kerr_6dof: {e}", file=sys.stderr)
     print("       Garante que o módulo C++ está compilado e o PYTHONPATH está correcto.",

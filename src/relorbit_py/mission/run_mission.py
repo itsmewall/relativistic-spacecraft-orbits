@@ -3,8 +3,8 @@
 Ponto de entrada para simulações de missão.
 
 Uso:
-    py -3 -m relorbit_py.run_mission
-    py -3 -m relorbit_py.run_mission --yaml src/relorbit_py/kerr_6dof_cases.yaml --out out/missions
+    py -3 -m relorbit_py.mission.run_mission
+    py -3 -m relorbit_py.mission.run_mission --yaml src/relorbit_py/mission/kerr_6dof_cases.yaml --out out/missions
 """
 from __future__ import annotations
 
@@ -19,32 +19,32 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from relorbit_py.simulate        import load_cases_yaml, simulate_case
-from relorbit_py.mission         import run_mission, MissionResult
+from relorbit_py.core.simulate        import load_cases_yaml, simulate_case
+from relorbit_py.mission.mission      import run_mission, MissionResult
 
-from relorbit_py.plots_orbit import (
+from relorbit_py.plots.plots_orbit import (
     plot_orbit,
     plot_mass,
     print_budget_tables,
 )
-from relorbit_py.plots_invariant_telemetry import (
+from relorbit_py.plots.plots_invariant_telemetry import (
     plot_invariant,
     plot_telemetry,
 )
-from relorbit_py.plots_visibility_redshift import (
+from relorbit_py.plots.plots_visibility_redshift import (
     plot_visibility_map,
     plot_redshift_asymptotic,
 )
-from relorbit_py.simulate_6dof import (
+from relorbit_py.core.simulate_6dof import (
     run_6dof_mission,
     validate_6dof,
 )
-from relorbit_py.attitude_mission import (
+from relorbit_py.mission.attitude_mission import (
     from_yaml_dict       as attitude_cfg_from_yaml,
     run_attitude_mission,
     validate_attitude,
 )
-from relorbit_py.simulate_kerr_6dof import (
+from relorbit_py.core.simulate_kerr_6dof import (
     run_kerr_6dof_mission,
     validate_kerr_6dof,
     plot_kerr_6dof,
@@ -52,7 +52,7 @@ from relorbit_py.simulate_kerr_6dof import (
 
 # ── Item 8: importação opcional de helpers de validate_coupling ───────────────
 try:
-    from relorbit_py.validate_coupling import (
+    from relorbit_py.validate.validate_coupling import (
         CFG_GEO, CFG_R_OUT, CFG_PHI, CFG_R_IN,
         extract as _coupling_extract,
     )
@@ -60,15 +60,15 @@ try:
 except ImportError:
     _COUPLING_AVAILABLE = False
 
-from relorbit_py.null_geodesic_kerr import (
+from relorbit_py.telemetry.null_geodesic_kerr import (
     circular_orbit_omega,
 )
-from relorbit_py.telemetry_raytracer import (
+from relorbit_py.telemetry.telemetry_raytracer import (
     TelemetryRayTracer,
     TelemetryResult,
     RayTracerConfig,
 )
-from relorbit_py.plot_raytracer import (
+from relorbit_py.plots.plot_raytracer import (
     plot_raytracer_results,
     print_raytracer_report,
 )
@@ -618,7 +618,24 @@ def _find_yaml() -> str:
     )
 
 
+def _configure_stdio() -> None:
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+
+        try:
+            reconfigure(errors="replace")
+        except Exception:
+            pass
+
+
 def main() -> None:
+    _configure_stdio()
     parser = argparse.ArgumentParser(description="RelOrbit - simulador de missoes")
     parser.add_argument("--yaml", default=None, help="Caminho para mission.yaml")
     parser.add_argument("--out",  default="out/missions", help="Diretorio de saida")

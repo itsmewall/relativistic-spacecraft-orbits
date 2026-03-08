@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from relorbit_py.mission import MissionResult
-from relorbit_py.plots_orbit import _horizon_radius, _isco_radius
+from relorbit_py.plots.plots_orbit import _horizon_radius, _isco_radius
 
 
 # ── Constante ─────────────────────────────────────────────────

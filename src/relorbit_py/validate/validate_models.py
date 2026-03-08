@@ -9,15 +9,15 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .simulate import simulate_case
-from .plots import (
+from relorbit_py.core.simulate import simulate_case
+from relorbit_py.plots.plots import (
     rel_drift as _rel_drift,
     plot_newton as _plot_newton,
     plot_schw as _plot_schw,
     plot_convergence_newton as _plot_convergence_newton,
     plot_convergence_overlay_newton as _plot_convergence_overlay_newton,
 )
-from .plots_time import plot_schw_time as _plot_schw_time
+from relorbit_py.plots.plots_time import plot_schw_time as _plot_schw_time
 
 from .validate_helpers import (
     unwrap_traj as _unwrap_traj,

@@ -197,7 +197,7 @@ def _run_one(args: Tuple[int, Dict[str, Any]]) -> MCResult:
     """Corre numa simulação Kerr 6-DOF. Chamado em ProcessPoolExecutor."""
     idx, p = args
     try:
-        from relorbit_py.simulate_kerr_6dof import run_kerr_6dof_mission  # lazy
+        from relorbit_py.core.simulate_kerr_6dof import run_kerr_6dof_mission  # lazy
 
         tidal_en    = bool(p.get("tidal_enabled", False))
         tidal_model = str(p.get("tidal_model", "DIAG_EIJ"))

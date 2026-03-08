@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .units import G0, C as SPEED_OF_LIGHT
+from relorbit_py.utils.units import G0, C as SPEED_OF_LIGHT
 
 
 # ============================================================
